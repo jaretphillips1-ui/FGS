@@ -1,7 +1,16 @@
-﻿param(
+param(
   [string]$Message = "Checkpoint"
 )
 
+
+# --- Host guard: prefer PowerShell 7+
+if ($PSVersionTable.PSVersion.Major -lt 7) {
+  Write-Host ""
+  Write-Host "❌ Save-FGS must be run in PowerShell 7+ (pwsh)." -ForegroundColor Red
+  Write-Host "Run from PS7:   & 'scripts\Save-FGS.ps1' -Message 'RODS_NAV_READY'" -ForegroundColor Yellow
+  Write-Host ""
+  exit 1
+}
 $ErrorActionPreference = "Stop"
 
 # --- Identity
@@ -107,6 +116,7 @@ Write-Host ""
 Write-Host "Repo files written:" -ForegroundColor DarkGray
 Write-Host " - $checkpointPath"
 Write-Host " - $zipPath"
+
 
 
 
