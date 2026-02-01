@@ -1,13 +1,6 @@
-'use client'
+import RodDetailClient from "./RodDetailClient";
 
-import Link from 'next/link'
-
-export default function RodDetailPage() {
-  return (
-    <main style={{ padding: 16 }}>
-      <h1>Rod Detail</h1>
-      <p>Placeholder page for /rods/[id]. Next step: load gear_items by id, show techniques, allow edits.</p>
-      <p><Link href="/rods">← Back to Rods</Link></p>
-    </main>
-  )
+export default async function Page(props: { params: Promise<{ id: string }> | { id: string } }) {
+  const params = await props.params;
+  return <RodDetailClient id={params.id} />;
 }
