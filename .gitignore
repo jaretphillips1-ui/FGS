@@ -43,3 +43,10 @@ next-env.d.ts
 # local sync marker
 _SYNC_PING.txt
 
+
+# Local editor backups
+*.bak_*
+
+# Local save artifacts
+FGS_MASTER_CHECKPOINT.txt
+FGS__SAVE__*.zip

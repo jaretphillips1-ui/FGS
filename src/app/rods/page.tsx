@@ -1,5 +1,7 @@
 'use client'
 
+import { useRouter } from 'next/navigation'
+
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
@@ -12,7 +14,8 @@ type GearItem = {
 }
 
 export default function RodLockerPage() {
-  const [userEmail, setUserEmail] = useState<string | null>(null)
+  const router = useRouter();
+const [userEmail, setUserEmail] = useState<string | null>(null)
   const [rows, setRows] = useState<GearItem[]>([])
   const [err, setErr] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -107,7 +110,10 @@ export default function RodLockerPage() {
         <button className="px-4 py-2 rounded bg-black text-white" onClick={addTestRod}>
           Add Test Rod
         </button>
-        <button className="px-4 py-2 rounded border" onClick={load}>
+        
+        <button className="px-4 py-2 rounded border" onClick={() => router.push('/rods/new')}>
+          New Rod
+        </button><button className="px-4 py-2 rounded border" onClick={load}>
           Refresh
         </button>
       </div>
@@ -116,7 +122,7 @@ export default function RodLockerPage() {
 
       <ul className="mt-6 space-y-2">
         {rows.map((r) => (
-          <li key={r.id} className="border rounded p-3">
+          <li key={r.id} className="border rounded p-3 cursor-pointer hover:bg-gray-50" onClick={() => router.push(`/rods/${r.id}`)}>
             <div className="font-medium">{r.name}</div>
             <div className="text-sm text-gray-600">{r.status}</div>
           </li>
@@ -127,3 +133,4 @@ export default function RodLockerPage() {
     </main>
   )
 }
+
