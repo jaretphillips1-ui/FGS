@@ -1,4 +1,4 @@
-param(
+﻿param(
   [string]$Message = "Checkpoint"
 )
 
@@ -108,10 +108,10 @@ if (Test-Path $backupZip) {
 }
 
 Write-Host ""
-Write-Host "✅ $projectName SAVED" -ForegroundColor Green
-Write-Host "📦 LATEST:  $latestDir"  -ForegroundColor Cyan
-Write-Host "🧯 BACKUP:  $backupDir (keeps 1)" -ForegroundColor Cyan
-Write-Host "☁ DROP:    $drop"       -ForegroundColor Cyan
+Write-Host "[OK] $projectName SAVED" -ForegroundColor Green
+Write-Host "[LATEST] LATEST:  $latestDir"  -ForegroundColor Cyan
+Write-Host "[BACKUP] BACKUP:  $backupDir (keeps 1)" -ForegroundColor Cyan
+Write-Host "[DROP] DROP:    $drop"       -ForegroundColor Cyan
 Write-Host ""
 Write-Host "Repo files written:" -ForegroundColor DarkGray
 Write-Host " - $checkpointPath"
