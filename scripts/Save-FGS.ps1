@@ -1,4 +1,4 @@
-param(
+﻿param(
   [string]$Message = "Checkpoint"
 )
 
@@ -38,7 +38,7 @@ $last   = (git log -1 --pretty=format:"%ad | %s" --date=iso) 2>$null
 # --- Core files in repo
 $checkpointPath = Join-Path $repo "$($projectName)_MASTER_CHECKPOINT.txt"
 $foundationPath = Join-Path $repo "$($projectName)_FOUNDATION.md"
-$zipPath        = Join-Path $repo "$($projectName)_LATEST.zip"
+$zipPath        = Join-Path $repo 'FGS_LATEST.zip'
 
 # --- Write checkpoint (overwrite)
 @"
@@ -107,4 +107,6 @@ Write-Host ""
 Write-Host "Repo files written:" -ForegroundColor DarkGray
 Write-Host " - $checkpointPath"
 Write-Host " - $zipPath"
+
+
 
