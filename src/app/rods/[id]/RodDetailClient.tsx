@@ -1,429 +1,663 @@
-'use client'
+"use client";
 
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { supabase } from '@/lib/supabase'
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import { supabase } from "@/lib/supabase";
 
-type AnyRecord = Record<string, any>
+type AnyRecord = Record<string, any>;
 
-const TABLE = 'gear_items'
+const TABLE = "gear_items";
 
-// First-pass technique set (safe defaults; easy to expand later)
+// Starter technique set (easy to expand later)
 const TECHNIQUES = [
-  'Crankbait',
-  'Spinnerbait',
-  'Chatterbait',
-  'Swimbait',
-  'Jerkbait',
-  'Topwater',
-  'Frog',
-  'Flipping/Pitching',
-  'Texas Rig',
-  'Jig',
-  'Ned Rig',
-  'Drop Shot',
-  'Wacky',
-  'Carolina Rig',
-  'Tube',
-  'Spoon',
-] as const
+  "Crankbait",
+  "Spinnerbait",
+  "Chatterbait",
+  "Swimbait",
+  "Jerkbait",
+  "Topwater",
+  "Frog",
+  "Flipping/Pitching",
+  "Texas Rig",
+  "Jig",
+  "Ned Rig",
+  "Drop Shot",
+  "Wacky",
+  "Carolina Rig",
+  "Tube",
+  "Spoon",
+] as const;
 
 function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
   return Promise.race([
     p,
-    new Promise<T>((_, rej) => setTimeout(() => rej(new Error(`${label} timed out after ${ms}ms`)), ms)),
-  ])
+    new Promise<T>((_, rej) =>
+      setTimeout(() => rej(new Error(`${label} timed out after ${ms}ms`)), ms)
+    ),
+  ]);
 }
 
+const BLOCKED_KEYS = new Set<string>([
+  "id",
+  "created_at",
+  "updated_at",
+  "deleted_at",
+  "user_id",
+  "owner_id",
+
+  // classification / foreign keys: keep stable unless you explicitly build editors for them
+  "gear_type",
+  "brand_id",
+  "product_id",
+]);
+
 function isEditableKey(k: string) {
-  const blocked = new Set(['id', 'created_at', 'updated_at', 'user_id', 'owner_id', 'deleted_at'])
-  if (blocked.has(k)) return false
-  if (k.startsWith('_')) return false
-  return true
+  if (BLOCKED_KEYS.has(k)) return false;
+  if (k.startsWith("_")) return false;
+  return true;
+}
+
+function stableStringify(v: any): string {
+  try {
+    return JSON.stringify(v, Object.keys(v || {}).sort(), 2);
+  } catch {
+    return String(v);
+  }
+}
+
+function deepEqual(a: any, b: any): boolean {
+  if (a === b) return true;
+  if (typeof a !== typeof b) return false;
+  if (a && b && typeof a === "object") {
+    return stableStringify(a) === stableStringify(b);
+  }
+  return false;
 }
 
 function coerceInputValue(value: any): string {
-  if (value === null || value === undefined) return ''
-  if (typeof value === 'string') return value
-  if (typeof value === 'number') return String(value)
-  if (typeof value === 'boolean') return value ? 'true' : 'false'
+  if (value === null || value === undefined) return "";
+  if (typeof value === "string") return value;
+  if (typeof value === "number") return String(value);
+  if (typeof value === "boolean") return value ? "true" : "false";
   try {
-    return JSON.stringify(value)
+    return JSON.stringify(value);
   } catch {
-    return String(value)
+    return String(value);
   }
 }
 
-function parseForUpdate(original: any, nextStr: string): any {
-  if (nextStr === '') return null
-
-  if (typeof original === 'number') {
-    const n = Number(nextStr)
-    return Number.isFinite(n) ? n : original
-  }
-
-  if (typeof original === 'boolean') {
-    const s = nextStr.toLowerCase().trim()
-    if (s === 'true' || s === '1' || s === 'yes') return true
-    if (s === 'false' || s === '0' || s === 'no') return false
-    return original
-  }
-
-  if (typeof original === 'object' && original !== null) {
+function parseMaybeJson(s: string): any {
+  const t = s.trim();
+  if (!t) return null;
+  if (t === "true") return true;
+  if (t === "false") return false;
+  if (!Number.isNaN(Number(t)) && t.match(/^-?\d+(\.\d+)?$/)) return Number(t);
+  if ((t.startsWith("{") && t.endsWith("}")) || (t.startsWith("[") && t.endsWith("]"))) {
     try {
-      return JSON.parse(nextStr)
+      return JSON.parse(t);
     } catch {
-      return original
+      return s;
     }
   }
-
-  return nextStr
+  return s;
 }
 
-function normalizeStatus(s: any): 'owned' | 'planned' | 'retired' | 'sold' | string {
-  if (typeof s !== 'string') return 'owned'
-  return s
+function getString(draft: AnyRecord | null, k: string) {
+  const v = draft?.[k];
+  return typeof v === "string" ? v : v == null ? "" : String(v);
 }
 
-function ensureStringArray(v: any): string[] {
-  if (Array.isArray(v)) return v.filter((x) => typeof x === 'string')
-  if (typeof v === 'string') return v ? [v] : []
-  return []
+function getBool(draft: AnyRecord | null, k: string) {
+  const v = draft?.[k];
+  return v === true;
+}
+
+function getStringArray(draft: AnyRecord | null, k: string) {
+  const v = draft?.[k];
+  return Array.isArray(v) ? (v as string[]) : [];
 }
 
 export default function RodDetailClient({ id }: { id: string }) {
-  const router = useRouter()
+  const router = useRouter();
 
-  const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
-  const [err, setErr] = useState<string | null>(null)
-  const [savedMsg, setSavedMsg] = useState<string | null>(null)
-  const [validationErr, setValidationErr] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
 
-  const [original, setOriginal] = useState<AnyRecord | null>(null)
-const [draft, setDraft] = useState<AnyRecord>({})
+  const [row, setRow] = useState<AnyRecord | null>(null);
+  const [draft, setDraft] = useState<AnyRecord | null>(null);
+  const originalRef = useRef<AnyRecord | null>(null);
 
-const isDirty = useMemo(() => {
-  if (!original) return false
+  const allKeys = useMemo(() => (row ? Object.keys(row).sort((a, b) => a.localeCompare(b)) : []), [row]);
 
-  // Compare draft vs original (ignore local-only keys)
-  for (const k of Object.keys(draft ?? {})) {
-    if (k === '__local_techniques') continue
-    const a = (draft as AnyRecord)[k]
-    const b = (original as AnyRecord)[k]
-    if (JSON.stringify(a) !== JSON.stringify(b)) return true
-  }
+  const editableKeys = useMemo(() => {
+    if (!row) return [];
+    return Object.keys(row)
+      .filter(isEditableKey)
+      .sort((a, b) => a.localeCompare(b));
+  }, [row]);
 
-  return false
-}, [draft, original])
-
-const loadSeq = useRef(0)
-
-const editableKeys = useMemo(() => {
-    if (!original) return []
-    return Object.keys(original).filter(isEditableKey).sort()
-  }, [original])
-
-  // If either of these columns exist, we’ll store techniques in the DB.
-  const techniquesKey = useMemo(() => {
-    if (!original) return null
-    if (editableKeys.includes('techniques')) return 'techniques'
-    if (editableKeys.includes('techniques_json')) return 'techniques_json'
-    return null
-  }, [editableKeys, original])
-
-  const selectedTechniques = useMemo(() => {
-    if (!original) return []
-    const key = techniquesKey
-    if (!key) return ensureStringArray(draft.__local_techniques)
-    return ensureStringArray(draft[key])
-  }, [draft, original, techniquesKey])
-
-  function setSelectedTechniques(next: string[]) {
-    const key = techniquesKey
-    if (key) {
-      setDraft((d) => ({ ...d, [key]: next }))
-    } else {
-      // Local-only; won’t be saved to DB until we add a column/table
-      setDraft((d) => ({ ...d, __local_techniques: next }))
+  const isDirty = useMemo(() => {
+    if (!draft || !originalRef.current) return false;
+    for (const k of editableKeys) {
+      if (!deepEqual(draft[k], originalRef.current[k])) return true;
     }
-  }
+    return false;
+  }, [draft, editableKeys]);
 
-  function toggleTechnique(label: string) {
-    const set = new Set(selectedTechniques)
-    if (set.has(label)) set.delete(label)
-    else set.add(label)
-    setSelectedTechniques(Array.from(set).sort())
+  async function load() {
+    setLoading(true);
+    setErr(null);
+
+    try {
+      const res = await withTimeout(
+        supabase
+          .from(TABLE)
+          .select("*")
+          .eq("id", id)
+          .eq("gear_type", "rod")
+          .maybeSingle<AnyRecord>(),
+        8000,
+        `select ${TABLE}`
+      );
+
+      if (res.error) throw res.error;
+      if (!res.data) throw new Error("Rod not found.");
+
+      setRow(res.data);
+      setDraft({ ...res.data });
+      originalRef.current = { ...res.data };
+    } catch (e: any) {
+      setErr(e?.message ?? String(e));
+    } finally {
+      setLoading(false);
+    }
   }
 
   useEffect(() => {
-    if (!id) {
-      setErr('Missing id')
-      setLoading(false)
-      return
-    }
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
 
-    const seq = ++loadSeq.current
-    let cancelled = false
-
-    async function load() {
-      setLoading(true)
-      setErr(null)
-      setSavedMsg(null)
-
-      try {
-        const sessionRes = await withTimeout(supabase.auth.getSession(), 6000, 'auth.getSession()')
-        const user = sessionRes.data.session?.user
-        if (!user) throw new Error('Not signed in.')
-
-        const queryRes = await withTimeout(
-          supabase.from(TABLE).select('*').eq('id', id).single(),
-          8000,
-          'gear_items single()'
-        )
-
-        if (queryRes.error) throw queryRes.error
-        if (!queryRes.data) throw new Error('Rod not found')
-
-        if (!cancelled && seq === loadSeq.current) {
-          setOriginal(queryRes.data as AnyRecord)
-          setDraft(queryRes.data as AnyRecord)
-        }
-      } catch (e: any) {
-        if (!cancelled) setErr(e?.message ?? 'Failed to load rod')
-      } finally {
-        if (!cancelled && seq === loadSeq.current) setLoading(false)
-      }
-    }
-
-    load()
-    return () => {
-      cancelled = true
-    }
-  }, [id])
-
-  function setField(k: string, value: any) {
-    setDraft((d) => ({ ...d, [k]: value }))
-  }
-
-  function updateFieldFromString(k: string, nextStr: string) {
-    if (!original) return
-    setDraft((d) => ({ ...d, [k]: parseForUpdate(original[k], nextStr) }))
-  }
-
-  async function save() {
-    if (!original) return
-
-    setSaving(true)
-      setValidationErr(null)
-
-      const trimmedName = String(draft.name ?? '').trim()
-      if (!trimmedName) {
-        setSaving(false)
-        setValidationErr('Name is required.')
-        return
-      }
-    setErr(null)
-    setSavedMsg(null)
+  async function onSave() {
+    if (!draft) return;
+    setSaving(true);
+    setErr(null);
 
     try {
-      const patch: AnyRecord = {}
-    // Apply trimmed name (and only persist if it actually changed)
-    if ((original?.name ?? '') !== trimmedName) patch.name = trimmedName
+      const payload: AnyRecord = {};
+      for (const k of editableKeys) payload[k] = draft[k] ?? null;
 
+      const res = await withTimeout(
+        supabase.from(TABLE).update(payload).eq("id", id),
+        8000,
+        `update ${TABLE}`
+      );
+      if (res.error) throw res.error;
 
-      // Only save editable keys (and only changed ones)
-      for (const k of editableKeys) {
-        // Don’t accidentally persist local-only techniques placeholder
-        if (k === '__local_techniques') continue
-
-        const before = original[k]
-        const after = draft[k]
-
-        const changed =
-          typeof before === 'object'
-            ? JSON.stringify(before) !== JSON.stringify(after)
-            : before !== after
-
-        if (changed) patch[k] = after
-      }
-
-      if (Object.keys(patch).length === 0) {
-        setSavedMsg('No changes to save.')
-        return
-      }
-
-      const res = await withTimeout(supabase.from(TABLE).update(patch).eq('id', id), 8000, 'gear_items update')
-      // Keep in-memory state in sync with what we just saved
-      setOriginal((o) => ({ ...(o ?? {}), ...patch }))
-      if (res.error) throw res.error
-
-      setOriginal({ ...original, ...patch })
-      setSavedMsg('Saved.')
+      originalRef.current = { ...(originalRef.current ?? {}), ...payload };
+      setRow((r) => ({ ...(r ?? {}), ...payload }));
+      setDraft((d) => ({ ...(d ?? {}), ...payload }));
     } catch (e: any) {
-      setErr(e?.message ?? 'Failed to save')
+      setErr(e?.message ?? String(e));
     } finally {
-      setSaving(false)
-      setTimeout(() => setSavedMsg(null), 1500)
+      setSaving(false);
     }
   }
 
-  // Friendly header name
-  const title = useMemo(() => {
-    const n = draft?.name
-    if (typeof n === 'string' && n.trim()) return n.trim()
-    return 'Rod'
-  }, [draft])
+  function onCancel() {
+    if (!originalRef.current) return;
+    setDraft({ ...originalRef.current });
+    setErr(null);
+  }
 
-  // “Other fields” = editable keys minus the basics we render explicitly.
-  const otherKeys = useMemo(() => {
-    const hidden = new Set(['name', 'status', 'saltwater_ok', techniquesKey ?? ''])
-    return editableKeys.filter((k) => !hidden.has(k))
-  }, [editableKeys, techniquesKey])
+  if (loading) return <div className="p-4 text-sm text-gray-500">Loading…</div>;
+
+  // Curated fields (only show if the key exists on this row)
+  const has = (k: string) => Object.prototype.hasOwnProperty.call(row ?? {}, k);
+
+  const statusOptions = ["owned", "planned", "sold", "retired"];
 
   return (
-    <div className="max-w-3xl mx-auto p-6 space-y-4">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold">{title}</h1>
-          <div className="text-sm text-gray-500 break-all">ID: {id}</div>
-        </div>
+    <main className="p-4 space-y-4 max-w-3xl">
+      <div className="flex items-center justify-between">
+        <button className="text-sm underline" onClick={() => router.push("/rods")}>
+          ← Back to rods
+        </button>
 
-        <div className="flex items-center gap-2">
-          <button className="px-4 py-2 rounded border" onClick={() => router.push('/rods')}>
-            Back
-          </button>
-
+        <div className="flex gap-2">
           <button
-            className="px-4 py-2 rounded bg-black text-white disabled:opacity-50"
-            onClick={save}
-            disabled={saving || loading || !original || !isDirty}
+            className="px-3 py-1 rounded border disabled:opacity-50"
+            onClick={onCancel}
+            disabled={!isDirty || saving}
           >
-            {saving ? 'Saving…' : 'Save'}
+            Cancel
+          </button>
+          <button
+            className="px-3 py-1 rounded border disabled:opacity-50"
+            onClick={onSave}
+            disabled={!isDirty || saving}
+          >
+            {saving ? "Saving…" : "Save"}
           </button>
         </div>
       </div>
 
-      {loading && <div className="text-gray-600">Loading…</div>}
-      {err && <div className="border rounded p-3 bg-red-50 text-red-800">{err}</div>}
-      {validationErr && <div className="border rounded p-3 bg-red-50 text-red-800">{validationErr}</div>}
+      <div className="flex items-baseline justify-between">
+        <h1 className="text-xl font-semibold">Rod Detail</h1>
+        <div className="text-xs text-gray-500">ID: {id}</div>
+      </div>
 
-      {savedMsg && <div className="border rounded p-3 bg-green-50 text-green-800">{savedMsg}</div>}
+      {err && (
+        <div className="rounded border p-3 text-sm">
+          <div className="font-medium">Error</div>
+          <div className="text-gray-600">{err}</div>
+        </div>
+      )}
 
-      {!loading && !err && original && (
-        <>
-          {/* BASICS */}
-          <section className="border rounded p-4 space-y-4">
-            <h2 className="text-sm font-semibold text-gray-700">Basics</h2>
-
+      {/* Curated Rod Form */}
+      <section className="rounded border p-4 space-y-4">
+        <div className="grid gap-3">
+          {has("name") && (
             <label className="grid gap-1">
-              <div className="text-sm font-medium">Name</div>
+              <span className="text-sm text-gray-600">Name</span>
               <input
                 className="border rounded px-3 py-2"
-                value={coerceInputValue(draft.name)}
-                onChange={(e) => setField('name', e.target.value)}
-                placeholder="Rod name"
+                value={getString(draft, "name")}
+                onChange={(e) => setDraft((d) => ({ ...(d ?? {}), name: e.target.value }))}
               />
             </label>
+          )}
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {has("status") && (
               <label className="grid gap-1">
-                <div className="text-sm font-medium">Status</div>
+                <span className="text-sm text-gray-600">Status</span>
                 <select
                   className="border rounded px-3 py-2"
-                  value={normalizeStatus(draft.status)}
-                  onChange={(e) => setField('status', e.target.value)}
+                  value={getString(draft, "status")}
+                  onChange={(e) => setDraft((d) => ({ ...(d ?? {}), status: e.target.value }))}
                 >
-                  <option value="owned">owned</option>
-                  <option value="planned">planned</option>
-                  <option value="retired">retired</option>
-                  <option value="sold">sold</option>
+                  {statusOptions.map((s) => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
+                  ))}
+                  {/* keep whatever existing status might be */}
+                  {!statusOptions.includes(getString(draft, "status")) && (
+                    <option value={getString(draft, "status")}>{getString(draft, "status")}</option>
+                  )}
                 </select>
               </label>
+            )}
 
-              <label className="flex items-center gap-3 border rounded px-3 py-2">
+            {has("saltwater_ok") && (
+              <label className="flex items-center gap-2 mt-6 md:mt-7">
                 <input
                   type="checkbox"
-                  checked={!!draft.saltwater_ok}
-                  onChange={(e) => setField('saltwater_ok', e.target.checked)}
+                  checked={getBool(draft, "saltwater_ok")}
+                  onChange={(e) =>
+                    setDraft((d) => ({ ...(d ?? {}), saltwater_ok: e.target.checked }))
+                  }
                 />
-                <span className="text-sm font-medium">Saltwater OK</span>
+                <span className="text-sm text-gray-700">Saltwater OK</span>
               </label>
-            </div>
-          </section>
+            )}
+          </div>
 
-          {/* TECHNIQUES */}
-          <section className="border rounded p-4 space-y-3">
-            <div className="flex items-center justify-between gap-3">
-              <h2 className="text-sm font-semibold text-gray-700">Techniques</h2>
-              {!techniquesKey && (
-                <span className="text-xs text-gray-500">
-                  (local only — add a DB column/table later)
-                </span>
+          {/* Notes */}
+          {has("notes") && (
+            <label className="grid gap-1">
+              <span className="text-sm text-gray-600">Notes</span>
+              <textarea
+                className="border rounded px-3 py-2 min-h-[120px]"
+                value={getString(draft, "notes")}
+                onChange={(e) => setDraft((d) => ({ ...(d ?? {}), notes: e.target.value }))}
+              />
+            </label>
+          )}
+
+          {has("storage_note") && (
+            <label className="grid gap-1">
+              <span className="text-sm text-gray-600">Storage note</span>
+              <input
+                className="border rounded px-3 py-2"
+                value={getString(draft, "storage_note")}
+                onChange={(e) =>
+                  setDraft((d) => ({ ...(d ?? {}), storage_note: e.target.value }))
+                }
+              />
+            </label>
+          )}
+
+                    {/* Rod Specs */}
+          <section className="rounded border p-4 space-y-4">
+            <h2 className="text-sm font-medium text-gray-700">Rod Specs</h2>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {has("rod_length_in") && (() => {
+  const totalIn =
+    typeof draft?.rod_length_in === "number"
+      ? (draft.rod_length_in as number)
+      : draft?.rod_length_in == null
+        ? null
+        : Number(draft.rod_length_in);
+
+  const safeTotal = Number.isFinite(totalIn as any) ? (totalIn as number) : null;
+
+  const feet = safeTotal == null ? "" : Math.floor(safeTotal / 12);
+  const inches = safeTotal == null ? "" : Math.round((safeTotal - (Number(feet) || 0) * 12) * 10) / 10;
+
+  const setLen = (nextFeetRaw: string, nextInchesRaw: string) => {
+    const f = nextFeetRaw.trim() === "" ? 0 : Number(nextFeetRaw);
+    const i = nextInchesRaw.trim() === "" ? 0 : Number(nextInchesRaw);
+
+    const fOk = Number.isFinite(f) && f >= 0;
+    const iOk = Number.isFinite(i) && i >= 0;
+
+    if (!fOk || !iOk) return;    // Normalize inches by carrying over into feet, then clamp to 0–11.5 (0.5" steps)
+    const carry = Math.floor(i / 12);
+    let normFeet = f + carry;
+    let normInches = i - carry * 12;
+
+    // clamp inches to 0–11.5, and carry if it somehow hits 12
+    if (normInches < 0) normInches = 0;
+    if (normInches > 11.5) normInches = 11.5;
+
+    // if clamp forced inches to 12 (shouldn't), carry to feet
+    if (normInches >= 12) {
+      normFeet += Math.floor(normInches / 12);
+      normInches = normInches % 12;
+    }
+
+    const total = normFeet * 12 + normInches;
+
+    setDraft((d) => ({
+      ...(d ?? {}),
+      rod_length_in:
+        total === 0 && nextFeetRaw.trim() === "" && nextInchesRaw.trim() === ""
+          ? null
+          : total,
+    }));};
+
+  return (
+    <div className="grid gap-1">
+      <span className="text-sm text-gray-600">Length</span>
+
+      <div className="flex gap-2">
+        <div className="grid gap-1 w-28">
+          <span className="text-xs text-gray-500">Feet</span>
+          <input
+            type="number"
+            min="0"
+            className="border rounded px-3 py-2"
+            value={feet}
+            onChange={(e) => setLen(e.target.value, String(inches))}
+          />
+        </div>
+
+        <div className="grid gap-1 w-28">
+          <span className="text-xs text-gray-500">Inches</span>
+          <input
+            type="number"
+            min="0"
+            step="0.5"
+            className="border rounded px-3 py-2"
+            value={inches}
+            onChange={(e) => setLen(String(feet), e.target.value)}
+          />
+        </div>
+
+        <div className="flex items-end pb-2 text-sm text-gray-600">
+          {safeTotal == null ? "" : `(${Math.floor(safeTotal / 12)}' ${Math.round((safeTotal % 12) * 10) / 10}")`}
+        </div>
+      </div>
+    </div>
+  );
+})()}
+
+              {has("rod_pieces") && (
+                <label className="grid gap-1">
+                  <span className="text-sm text-gray-600">Pieces</span>
+                  <input
+                    type="number"
+                    className="border rounded px-3 py-2"
+                    value={draft?.rod_pieces ?? ""}
+                    onChange={(e) =>
+                      setDraft((d) => ({
+                        ...(d ?? {}),
+                        rod_pieces: e.target.value === "" ? null : Number(e.target.value),
+                      }))
+                    }
+                  />
+                </label>
               )}
             </div>
 
-            <div className="flex flex-wrap gap-2">
-              {TECHNIQUES.map((t) => {
-                const active = selectedTechniques.includes(t)
-                return (
-                  <button
-                    key={t}
-                    type="button"
-                    onClick={() => toggleTechnique(t)}
-                    className={
-                      'px-3 py-1 rounded-full border text-sm ' +
-                      (active ? 'bg-black text-white' : 'bg-white hover:bg-gray-50')
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {has("rod_power") && (
+                <label className="grid gap-1">
+                  <span className="text-sm text-gray-600">Power</span>
+                  <select
+                    className="border rounded px-3 py-2"
+                    value={draft?.rod_power ?? ""}
+                    onChange={(e) =>
+                      setDraft((d) => ({ ...(d ?? {}), rod_power: e.target.value || null }))
                     }
                   >
-                    {t}
-                  </button>
-                )
-              })}
+                    <option value="">—</option>
+                    {["UL", "L", "ML", "M", "MH", "H", "XH"].map((p) => (
+                      <option key={p} value={p}>
+                        {p}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
+
+              {has("rod_action") && (
+                <label className="grid gap-1">
+                  <span className="text-sm text-gray-600">Action</span>
+                  <select
+                    className="border rounded px-3 py-2"
+                    value={draft?.rod_action ?? ""}
+                    onChange={(e) =>
+                      setDraft((d) => ({ ...(d ?? {}), rod_action: e.target.value || null }))
+                    }
+                  >
+                    <option value="">—</option>
+                    {["Slow", "Moderate", "Fast", "Extra Fast"].map((a) => (
+                      <option key={a} value={a}>
+                        {a}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
             </div>
 
-            <div className="text-xs text-gray-500">
-              Selected: {selectedTechniques.length ? selectedTechniques.join(', ') : '—'}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {has("rod_line_min_lb") && has("rod_line_max_lb") && (
+                <label className="grid gap-1">
+                  <span className="text-sm text-gray-600">Line Rating (lb)</span>
+                  <div className="flex gap-2">
+                    <input
+                      type="number"
+                      className="border rounded px-3 py-2 w-full"
+                      placeholder="Min"
+                      value={draft?.rod_line_min_lb ?? ""}
+                      onChange={(e) =>
+                        setDraft((d) => ({
+                          ...(d ?? {}),
+                          rod_line_min_lb: e.target.value === "" ? null : Number(e.target.value),
+                        }))
+                      }
+                    />
+                    <input
+                      type="number"
+                      className="border rounded px-3 py-2 w-full"
+                      placeholder="Max"
+                      value={draft?.rod_line_max_lb ?? ""}
+                      onChange={(e) =>
+                        setDraft((d) => ({
+                          ...(d ?? {}),
+                          rod_line_max_lb: e.target.value === "" ? null : Number(e.target.value),
+                        }))
+                      }
+                    />
+                  </div>
+                </label>
+              )}
+
+              {has("rod_lure_min_oz") && has("rod_lure_max_oz") && (
+                <label className="grid gap-1">
+                  <span className="text-sm text-gray-600">Lure Rating (oz)</span>
+                  <div className="flex gap-2">
+                    <input
+                      type="number"
+                      step="0.01"
+                      className="border rounded px-3 py-2 w-full"
+                      placeholder="Min"
+                      value={draft?.rod_lure_min_oz ?? ""}
+                      onChange={(e) =>
+                        setDraft((d) => ({
+                          ...(d ?? {}),
+                          rod_lure_min_oz: e.target.value === "" ? null : Number(e.target.value),
+                        }))
+                      }
+                    />
+                    <input
+                      type="number"
+                      step="0.01"
+                      className="border rounded px-3 py-2 w-full"
+                      placeholder="Max"
+                      value={draft?.rod_lure_max_oz ?? ""}
+                      onChange={(e) =>
+                        setDraft((d) => ({
+                          ...(d ?? {}),
+                          rod_lure_max_oz: e.target.value === "" ? null : Number(e.target.value),
+                        }))
+                      }
+                    />
+                  </div>
+                </label>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              {has("rod_handle") && (
+                <label className="grid gap-1">
+                  <span className="text-sm text-gray-600">Handle</span>
+                  <input
+                    className="border rounded px-3 py-2"
+                    value={draft?.rod_handle ?? ""}
+                    onChange={(e) =>
+                      setDraft((d) => ({ ...(d ?? {}), rod_handle: e.target.value || null }))
+                    }
+                  />
+                </label>
+              )}
+
+              {has("rod_blank") && (
+                <label className="grid gap-1">
+                  <span className="text-sm text-gray-600">Blank</span>
+                  <input
+                    className="border rounded px-3 py-2"
+                    value={draft?.rod_blank ?? ""}
+                    onChange={(e) =>
+                      setDraft((d) => ({ ...(d ?? {}), rod_blank: e.target.value || null }))
+                    }
+                  />
+                </label>
+              )}
+
+              {has("rod_guides") && (
+                <label className="grid gap-1">
+                  <span className="text-sm text-gray-600">Guides</span>
+                  <input
+                    className="border rounded px-3 py-2"
+                    value={draft?.rod_guides ?? ""}
+                    onChange={(e) =>
+                      setDraft((d) => ({ ...(d ?? {}), rod_guides: e.target.value || null }))
+                    }
+                  />
+                </label>
+              )}
             </div>
           </section>
 
-          {/* OTHER FIELDS (fallback) */}
-          {otherKeys.length > 0 && (
-            <details className="border rounded p-4">
-              <summary className="cursor-pointer select-none text-sm font-semibold text-gray-700">
-                Other fields
-              </summary>
-
-              <div className="mt-4 grid gap-3">
-                {otherKeys.map((k) => {
-                  const origVal = original[k]
-                  const current = draft[k]
-
+{/* Techniques */}
+          {has("techniques") && (
+            <div className="grid gap-2">
+              <div className="text-sm text-gray-600">Techniques</div>
+              <div className="flex flex-wrap gap-2">
+                {TECHNIQUES.map((t) => {
+                  const selected = getStringArray(draft, "techniques");
+                  const on = selected.includes(t);
                   return (
-                    <label key={k} className="grid gap-1">
-                      <div className="text-sm font-medium">{k}</div>
-                      <input
-                        className="border rounded px-3 py-2"
-                        value={coerceInputValue(current)}
-                        onChange={(e) => updateFieldFromString(k, e.target.value)}
-                        placeholder={coerceInputValue(origVal)}
-                      />
-                    </label>
-                  )
+                    <button
+                      key={t}
+                      type="button"
+                      className="px-2 py-1 rounded border text-sm"
+                      onClick={() => {
+                        const next = on ? selected.filter((x) => x !== t) : [...selected, t];
+                        setDraft((d) => ({ ...(d ?? {}), techniques: next }));
+                      }}
+                    >
+                      {on ? `✓ ${t}` : t}
+                    </button>
+                  );
                 })}
               </div>
-            </details>
+            </div>
           )}
+        </div>
+      </section>
 
-          {/* DEBUG */}
-          <details className="border rounded p-4">
-            <summary className="cursor-pointer select-none text-sm font-semibold text-gray-700">
-              Debug: full row JSON
-            </summary>
-            <pre className="mt-3 text-xs overflow-auto">{JSON.stringify(original, null, 2)}</pre>
+      {/* Advanced: everything else editable (excluding blocked keys) */}
+      <details className="rounded border p-4">
+        <summary className="cursor-pointer text-sm font-medium">Advanced fields</summary>
+        <div className="mt-4 grid gap-3">
+          {editableKeys
+            .filter(
+              (k) =>
+                !["name", "status", "saltwater_ok", "notes", "storage_note", "techniques"].includes(k)
+            )
+            .map((k) => {
+              const v = draft?.[k];
+              const s = coerceInputValue(v);
+
+              return (
+                <label key={k} className="grid gap-1">
+                  <span className="text-sm text-gray-600">{k}</span>
+                  <input
+                    className="border rounded px-3 py-2"
+                    value={s}
+                    onChange={(e) =>
+                      setDraft((d) => ({ ...(d ?? {}), [k]: parseMaybeJson(e.target.value) }))
+                    }
+                  />
+                </label>
+              );
+            })}
+
+          <div className="text-xs text-gray-500">
+            {isDirty ? "Unsaved changes" : "All changes saved"}
+          </div>
+
+          <div className="text-xs text-gray-500">
+            Non-editable keys (blocked): {Array.from(BLOCKED_KEYS).join(", ")}
+          </div>
+
+          {/* Helpful: quick peek at all keys for schema discovery */}
+          <details className="mt-2">
+            <summary className="cursor-pointer text-xs text-gray-600">Show all keys</summary>
+            <pre className="mt-2 text-xs bg-gray-50 border rounded p-2 overflow-auto">
+{allKeys.join("\n")}
+            </pre>
           </details>
-        </>
-      )}
-    </div>
-  )
+        </div>
+      </details>
+    </main>
+  );
 }
