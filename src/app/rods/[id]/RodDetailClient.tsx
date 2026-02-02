@@ -98,6 +98,7 @@ export default function RodDetailClient({ id }: { id: string }) {
   const [saving, setSaving] = useState(false)
   const [err, setErr] = useState<string | null>(null)
   const [savedMsg, setSavedMsg] = useState<string | null>(null)
+  const [validationErr, setValidationErr] = useState<string | null>(null)
 
   const [original, setOriginal] = useState<AnyRecord | null>(null)
   const [draft, setDraft] = useState<AnyRecord>({})
@@ -200,11 +201,22 @@ export default function RodDetailClient({ id }: { id: string }) {
     if (!original) return
 
     setSaving(true)
+      setValidationErr(null)
+
+      const trimmedName = String(draft.name ?? '').trim()
+      if (!trimmedName) {
+        setSaving(false)
+        setValidationErr('Name is required.')
+        return
+      }
     setErr(null)
     setSavedMsg(null)
 
     try {
       const patch: AnyRecord = {}
+    // Apply trimmed name (and only persist if it actually changed)
+    if ((original?.name ?? '') !== trimmedName) patch.name = trimmedName
+
 
       // Only save editable keys (and only changed ones)
       for (const k of editableKeys) {
@@ -271,7 +283,7 @@ export default function RodDetailClient({ id }: { id: string }) {
           <button
             className="px-4 py-2 rounded bg-black text-white disabled:opacity-50"
             onClick={save}
-            disabled={saving || loading || !original}
+            disabled={saving || loading || !original || !isDirty}
           >
             {saving ? 'Saving…' : 'Save'}
           </button>
@@ -280,6 +292,8 @@ export default function RodDetailClient({ id }: { id: string }) {
 
       {loading && <div className="text-gray-600">Loading…</div>}
       {err && <div className="border rounded p-3 bg-red-50 text-red-800">{err}</div>}
+      {validationErr && <div className="border rounded p-3 bg-red-50 text-red-800">{validationErr}</div>}
+
       {savedMsg && <div className="border rounded p-3 bg-green-50 text-green-800">{savedMsg}</div>}
 
       {!loading && !err && original && (
