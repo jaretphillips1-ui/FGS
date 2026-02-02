@@ -1,0 +1,22 @@
+# Ensure this file stays LF
+.gitattributes text eol=lf
+
+# Normalize line endings in repo
+* text=auto
+
+# Source files should be LF in repo
+*.ts   text eol=lf
+*.tsx  text eol=lf
+*.js   text eol=lf
+*.jsx  text eol=lf
+*.json text eol=lf
+*.css  text eol=lf
+*.md   text eol=lf
+*.sql  text eol=lf
+*.yml  text eol=lf
+*.yaml text eol=lf
+
+# Windows scripts should be CRLF
+*.ps1  text eol=crlf
+*.bat  text eol=crlf
+*.cmd  text eol=crlf
