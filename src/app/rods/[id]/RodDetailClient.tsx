@@ -228,6 +228,8 @@ export default function RodDetailClient({ id }: { id: string }) {
       }
 
       const res = await withTimeout(supabase.from(TABLE).update(patch).eq('id', id), 8000, 'gear_items update')
+      // Keep in-memory state in sync with what we just saved
+      setOriginal((o) => ({ ...(o ?? {}), ...patch }))
       if (res.error) throw res.error
 
       setOriginal({ ...original, ...patch })
