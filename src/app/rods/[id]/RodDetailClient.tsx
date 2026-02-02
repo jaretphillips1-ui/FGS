@@ -101,11 +101,25 @@ export default function RodDetailClient({ id }: { id: string }) {
   const [validationErr, setValidationErr] = useState<string | null>(null)
 
   const [original, setOriginal] = useState<AnyRecord | null>(null)
-  const [draft, setDraft] = useState<AnyRecord>({})
+const [draft, setDraft] = useState<AnyRecord>({})
 
-  const loadSeq = useRef(0)
+const isDirty = useMemo(() => {
+  if (!original) return false
 
-  const editableKeys = useMemo(() => {
+  // Compare draft vs original (ignore local-only keys)
+  for (const k of Object.keys(draft ?? {})) {
+    if (k === '__local_techniques') continue
+    const a = (draft as AnyRecord)[k]
+    const b = (original as AnyRecord)[k]
+    if (JSON.stringify(a) !== JSON.stringify(b)) return true
+  }
+
+  return false
+}, [draft, original])
+
+const loadSeq = useRef(0)
+
+const editableKeys = useMemo(() => {
     if (!original) return []
     return Object.keys(original).filter(isEditableKey).sort()
   }, [original])
