@@ -4,8 +4,31 @@ import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { ROD_TECHNIQUES, normalizeTechniques } from "@/lib/rodTechniques";
 
-type AnyRecord = Record<string, any>
-const HIDE_KEYS = new Set(["rod_techniques", "techniques"]);
+type AnyRecord = Record<string, unknown>
+
+function extractTechniques(row: AnyRecord | null | undefined): string[] {
+  if (!row) return []
+  const v =
+    row.rod_techniques ??
+    row.techniques ??
+    row.technique_list ??
+    row.technique ??
+    row.rod_technique ??
+    row.techniques_json
+
+  if (Array.isArray(v)) return v.filter(Boolean).map(String)
+  if (typeof v === 'string') {
+    const s = v.trim()
+    if (!s) return []
+    try {
+      const j = JSON.parse(s)
+      if (Array.isArray(j)) return j.filter(Boolean).map(String)
+    } catch {}
+    return s.split(',').map(x => x.trim()).filter(Boolean)
+  }
+  return []
+}
+
 
 const TABLE = 'gear_items'
 
@@ -18,6 +41,17 @@ const READONLY_KEYS = new Set([
   'gear_type',
 ])
 
+// Keys we never want to show/edit in the generic editor section
+const HIDE_KEYS = new Set([
+  'rod_techniques',
+  'techniques',
+  'technique_list',
+  'technique',
+  'rod_technique',
+  'techniques_json',
+])
+
+
 function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
   return Promise.race([
     p,
@@ -27,11 +61,11 @@ function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
   ])
 }
 
-function isPlainObject(v: any) {
+function isPlainObject(v: unknown) {
   return v !== null && typeof v === 'object' && !Array.isArray(v)
 }
 
-function deepEqual(a: any, b: any) {
+function deepEqual(a: unknown, b: unknown) {
   if (a === b) return true
   if (Array.isArray(a) && Array.isArray(b)) return JSON.stringify(a) === JSON.stringify(b)
   if (isPlainObject(a) && isPlainObject(b)) return JSON.stringify(a) === JSON.stringify(b)
@@ -69,6 +103,8 @@ export default function RodDetailClient({ id, initial }: { id: string; initial?:
 
   const [techniques, setTechniques] = useState<string[]>([]);
 
+
+
   function toggleTechnique(name: string) {
 
     setTechniques((cur) => (cur.includes(name) ? cur.filter((x) => x !== name) : [...cur, name]));
@@ -84,6 +120,12 @@ export default function RodDetailClient({ id, initial }: { id: string; initial?:
   const [savedMsg, setSavedMsg] = useState<string | null>(null)
 
   const [original, setOriginal] = useState<AnyRecord | null>(null)
+
+  const techniquesDirty = useMemo(() => {
+    const a = normalizeTechniques(techniques)
+    const b = normalizeTechniques(extractTechniques(original))
+    return JSON.stringify(a) !== JSON.stringify(b)
+  }, [techniques, original])
   const [draft, setDraft] = useState<AnyRecord | null>(null)
 
   // Local-only length editor state (feet+inches) -> saved into total inches column
@@ -94,22 +136,25 @@ export default function RodDetailClient({ id, initial }: { id: string; initial?:
 
   // If the server already provided the row, seed state and skip the initial client fetch.
   useEffect(() => {
-    if (initial) return;
-    if (!initial) return;
-\n\ \ \ \ setOriginal\(initial\);
-    setDraft(initial);
+  if (!initial) return
+  setOriginal(initial)
+  setDraft(initial)
+  setTechniques(normalizeTechniques(extractTechniques(initial)))
 
-    const lk = pickFirstExistingKey(initial, ['rod_length_in', 'length_in']);
-    if (lk) {
-      const { ft, inch } = formatFeetInches(Number(initial[lk] ?? 0));
-      setLenFeet(ft);
-      setLenInches(inch);
+  const lk = pickFirstExistingKey(initial, ['rod_length_in', 'length_in'])
+  if (lk) {
+    const total = Number((initial as AnyRecord)[lk] ?? 0)
+    if (Number.isFinite(total) && total >= 0) {
+      const feet = Math.floor(total / 12)
+      const inch = total % 12
+      setLenFeet(feet)
+      setLenInches(inch)
     }
+  }
 
-    setLoading(false);
-  }, [initial]);
-
-  // Detect which columns exist on this row (schema-safe mapping)
+  setLoading(false)
+}, [initial])
+// Detect which columns exist on this row (schema-safe mapping)
   const lengthKey = useMemo(() => pickFirstExistingKey(original, ['rod_length_in', 'length_in']), [original])
   const piecesKey = useMemo(() => pickFirstExistingKey(original, ['rod_pieces', 'pieces']), [original])
   const powerKey = useMemo(() => pickFirstExistingKey(original, ['rod_power', 'power']), [original])
@@ -120,7 +165,7 @@ export default function RodDetailClient({ id, initial }: { id: string; initial?:
   const editableKeys = useMemo(() => {
     if (!original) return []
     return Object.keys(original)
-      .filter((k) => !READONLY_KEYS.has(k))
+      .filter((k) => !READONLY_KEYS.has(k) && !HIDE_KEYS.has(k))
       .sort()
   }, [original])
 
@@ -182,7 +227,7 @@ export default function RodDetailClient({ id, initial }: { id: string; initial?:
             setLenInches(inch)
           }
         }
-      } catch (e: any) {
+      } catch (e: unknown) {
         if (!cancelled && seq === loadSeq.current) setErr(e?.message ?? 'Failed to load rod.')
       } finally {
         if (!cancelled && seq === loadSeq.current) setLoading(false)
@@ -191,7 +236,7 @@ export default function RodDetailClient({ id, initial }: { id: string; initial?:
 
     load()
     return () => { cancelled = true }
-  }, [id])
+  }, [id, initial, router])
   
   async function deleteRod() {
     if (!original) return
@@ -222,7 +267,7 @@ export default function RodDetailClient({ id, initial }: { id: string; initial?:
 
       router.push("/rods")
       router.refresh()
-    } catch (e: any) {
+    } catch (e: unknown) {
       setErr(e?.message ?? "Failed to delete.")
     } finally {
       setSaving(false)
@@ -263,11 +308,14 @@ export default function RodDetailClient({ id, initial }: { id: string; initial?:
         if (curTotal !== base) patch[lengthKey] = curTotal
       }
 
-      if (Object.keys(patch).length === 0) {
+      if (Object.keys(patch).length === 0 && !techniquesDirty) {
         setSavedMsg('No changes to save.')
         return
       }
-
+    // Persist techniques from the techniques UI (only when changed)
+    if (techniquesDirty) {
+      ;(patch as AnyRecord).rod_techniques = normalizeTechniques(techniques)
+    }
       const res = await withTimeout(
         supabase.from(TABLE).update(patch).eq('id', id),
         8000,
@@ -280,7 +328,7 @@ export default function RodDetailClient({ id, initial }: { id: string; initial?:
       setDraft(next)
 
       setSavedMsg('Saved.')
-    } catch (e: any) {
+    } catch (e: unknown) {
       setErr(e?.message ?? 'Failed to save.')
     } finally {
       setSaving(false)
@@ -331,8 +379,8 @@ export default function RodDetailClient({ id, initial }: { id: string; initial?:
           <button
             className="px-4 py-2 rounded bg-black text-white disabled:opacity-50"
             onClick={save}
-            disabled={saving || !isDirty}
-            title={!isDirty ? 'No changes' : 'Save changes'}
+            disabled={saving || !(isDirty || techniquesDirty)}
+            title={!(isDirty || techniquesDirty) ? 'No changes' : 'Save changes'}
           >
             {saving ? 'Saving…' : 'Save'}
           </button>
@@ -598,6 +646,11 @@ export default function RodDetailClient({ id, initial }: { id: string; initial?:
     </main>
   )
 }
+
+
+
+
+
 
 
 

@@ -64,3 +64,6 @@ FGS_MASTER_CHECKPOINT*.txt
 # Local dev artifacts
 .devlogs/
 .icons/
+
+tools/
+

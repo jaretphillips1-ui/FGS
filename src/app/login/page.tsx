@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -45,7 +45,7 @@ export default function LoginPage() {
         if (data.session) router.replace("/rods");
         else setMsg("Account created. If email confirmations are ON, confirm your email then sign in.");
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       setMsg(err?.message ?? "Login failed.");
     } finally {
       setLoading(false);
@@ -127,3 +127,4 @@ export default function LoginPage() {
     </main>
   );
 }
+

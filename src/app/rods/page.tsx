@@ -72,7 +72,7 @@ export default function RodLockerPage() {
       }
 
       setRows(queryRes.data ?? [])
-    } catch (e: any) {
+    } catch (e: unknown) {
       setErr(e?.message ?? 'Unknown error while loading rods.')
       setRows([])
       setUserEmail(null)
@@ -112,7 +112,6 @@ export default function RodLockerPage() {
     load()
     const { data: sub } = supabase.auth.onAuthStateChange(() => load())
     return () => sub.subscription.unsubscribe()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   if (loading) return <main className="p-6">Loading…</main>
@@ -191,3 +190,4 @@ export default function RodLockerPage() {
     </main>
   )
 }
+

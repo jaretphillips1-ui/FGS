@@ -58,8 +58,8 @@ function makeTotalInches(feetRaw: string, inchesRaw: string): number | null {
 
   if (f == null && i == null) return null;
 
-  const feet = Number.isFinite(f as any) ? (f as number) : 0;
-  const inches = Number.isFinite(i as any) ? (i as number) : 0;
+  const feet = Number.isFinite(f as unknown) ? (f as number) : 0;
+  const inches = Number.isFinite(i as unknown) ? (i as number) : 0;
 
   if (feet < 0 || inches < 0) return null;
 
@@ -189,7 +189,7 @@ export default function NewRodPage() {
       const user = sessionRes.data.session?.user;
       if (!user) throw new Error("Not signed in.");
 
-      const payload: Record<string, any> = {
+      const payload: Record<string, unknown> = {
         owner_id: user.id,
         gear_type: "rod",
         name: form.name.trim(),
@@ -226,7 +226,7 @@ export default function NewRodPage() {
       if (!data?.id) throw new Error("Insert succeeded but no id returned.");
 
       router.push(`/rods/${data.id}`);
-    } catch (e: any) {
+    } catch (e: unknown) {
       setErr(e?.message ?? String(e));
     } finally {
       setSaving(false);
@@ -527,6 +527,7 @@ export default function NewRodPage() {
 </main>
   );
 }
+
 
 
 

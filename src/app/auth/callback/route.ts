@@ -35,10 +35,10 @@ export async function GET(request: Request) {
       get(name: string) {
         return cookieStore.get(name)?.value;
       },
-      set(name: string, value: string, options: any) {
+      set(name: string, value: string, options: unknown) {
         cookieStore.set({ name, value, ...options });
       },
-      remove(name: string, options: any) {
+      remove(name: string, options: unknown) {
         cookieStore.set({ name, value: "", ...options, maxAge: 0 });
       },
     },
@@ -50,3 +50,4 @@ export async function GET(request: Request) {
 
   return NextResponse.redirect(`${url.origin}${next}`);
 }
+
