@@ -5,25 +5,8 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 
-const TECHNIQUES = [
-  "Crankbait",
-  "Spinnerbait",
-  "Chatterbait",
-  "Swimbait",
-  "Jerkbait",
-  "Topwater",
-  "Frog",
-  "Flipping/Pitching",
-  "Texas Rig",
-  "Jig",
-  "Ned Rig",
-  "Drop Shot",
-  "Wacky",
-  "Carolina Rig",
-  "Tube",
-  "Spoon",
-] as const;
-
+import { ROD_TECHNIQUES } from '@/lib/rodTechniques';
+const TECHNIQUES = ROD_TECHNIQUES as readonly string[];
 const POWER_OPTIONS = ["—", "UL", "L", "ML", "M", "MH", "H", "XH"] as const;
 const ACTION_OPTIONS = ["—", "Slow", "Mod", "Mod-Fast", "Fast", "X-Fast"] as const;
 const STATUS_OPTIONS = ["owned", "planned", "sold", "retired"] as const;
@@ -89,7 +72,6 @@ function makeTotalInches(feetRaw: string, inchesRaw: string): number | null {
 
 export default function NewRodPage() {
   const router = useRouter();
-
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -165,7 +147,16 @@ export default function NewRodPage() {
     setForm((s) => ({ ...s, rod_length_in: total }));
   }
 
+
+  function toggleTechnique(name: string) {
+    setForm((s) => {
+      const cur = Array.isArray(s.techniques) ? s.techniques : []
+      const next = cur.includes(name) ? cur.filter((x) => x !== name) : [...cur, name]
+      return { ...s, techniques: next }
+    })
+  }
   function validate(): string | null {
+    if (!form.name.trim()) return "Name is required.";
     if (
       form.rod_line_min_lb != null &&
       form.rod_line_max_lb != null &&
@@ -201,16 +192,13 @@ export default function NewRodPage() {
       const payload: Record<string, any> = {
         owner_id: user.id,
         gear_type: "rod",
-
-        name: form.name.trim() || null,
+        name: form.name.trim(),
         status: form.status,
         saltwater_ok: form.saltwater_ok,
 
         notes: form.notes.trim() || null,
         storage_note: form.storage_note.trim() || null,
-
-        techniques: form.techniques,
-
+        rod_techniques: form.techniques,
         rod_length_in: form.rod_length_in,
 
         rod_pieces: form.rod_pieces,
@@ -347,6 +335,33 @@ export default function NewRodPage() {
       </section>
 
       <section className="rounded border p-4 space-y-4">
+      <section className="rounded border p-4 space-y-3">
+        <div className="text-sm font-medium">Rod Techniques</div>
+
+        <div className="flex flex-wrap gap-2">
+          {TECHNIQUES.map((t) => {
+            const active = form.techniques.includes(t)
+            return (
+              <button
+                key={t}
+                type="button"
+                onClick={() => toggleTechnique(t)}
+                className={
+                  "px-3 py-1 rounded border text-sm " +
+                  (active ? "bg-black text-white border-black" : "bg-white text-black")
+                }
+                aria-pressed={active}
+              >
+                {t}
+              </button>
+            )
+          })}
+        </div>
+
+        <div className="text-xs text-gray-500">
+          Selected: {form.techniques.length ? form.techniques.join(", ") : "none"}
+        </div>
+      </section>
         <div className="text-sm font-medium">Rod Specs</div>
 
         <div className="grid gap-3">
@@ -509,30 +524,10 @@ export default function NewRodPage() {
           </div>
         </div>
       </section>
-
-      <section className="rounded border p-4 space-y-3">
-        <div className="text-sm font-medium">Techniques</div>
-        <div className="flex flex-wrap gap-2">
-          {TECHNIQUES.map((t) => {
-            const on = form.techniques.includes(t);
-            return (
-              <button
-                key={t}
-                type="button"
-                className="px-2 py-1 rounded border text-sm"
-                onClick={() => {
-                  setForm((s) => ({
-                    ...s,
-                    techniques: on ? s.techniques.filter((x) => x !== t) : [...s.techniques, t],
-                  }));
-                }}
-              >
-                {on ? `✓ ${t}` : t}
-              </button>
-            );
-          })}
-        </div>
-      </section>
-    </main>
+</main>
   );
 }
+
+
+
+
