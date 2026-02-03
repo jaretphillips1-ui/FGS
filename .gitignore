@@ -67,3 +67,7 @@ FGS_MASTER_CHECKPOINT*.txt
 
 tools/
 
+
+# Junk path that should never be tracked
+pace_SAVESFGSLATEST/
+
