@@ -1,4 +1,4 @@
-﻿"use client"
+"use client"
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
@@ -62,7 +62,7 @@ function formatFeetInches(totalInches: number | null) {
   return { ft, inch, total: t }
 }
 
-export default function RodDetailClient({ id }: { id: string }) {
+export default function RodDetailClient({ id, initial }: { id: string; initial?: AnyRecord }) {
   const router = useRouter()
 
   const [loading, setLoading] = useState(true)
@@ -80,6 +80,24 @@ export default function RodDetailClient({ id }: { id: string }) {
   const [lenInches, setLenInches] = useState(0)
 
   const loadSeq = useRef(0)
+
+  // If the server already provided the row, seed state and skip the initial client fetch.
+  useEffect(() => {
+    if (initial) return;
+    if (!initial) return;
+
+    setOriginal(initial);
+    setDraft(initial);
+
+    const lk = pickFirstExistingKey(initial, ['rod_length_in', 'length_in']);
+    if (lk) {
+      const { ft, inch } = formatFeetInches(Number(initial[lk] ?? 0));
+      setLenFeet(ft);
+      setLenInches(inch);
+    }
+
+    setLoading(false);
+  }, [initial]);
 
   // Detect which columns exist on this row (schema-safe mapping)
   const lengthKey = useMemo(() => pickFirstExistingKey(original, ['rod_length_in', 'length_in']), [original])
@@ -116,6 +134,7 @@ export default function RodDetailClient({ id }: { id: string }) {
   }, [original, draft, editableKeys, lengthKey, lenFeet, lenInches])
 
   useEffect(() => {
+    if (initial) return;
     const seq = ++loadSeq.current
     let cancelled = false
 
@@ -468,3 +487,5 @@ export default function RodDetailClient({ id }: { id: string }) {
     </main>
   )
 }
+
+

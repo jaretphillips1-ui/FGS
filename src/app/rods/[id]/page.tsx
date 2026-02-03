@@ -1,10 +1,10 @@
-import RodDetailClient from './RodDetailClient'
+import RodDetailClient from "./RodDetailClient";
 
 export default async function Page({
   params,
 }: {
-  params: Promise<{ id: string }>
+  params: Promise<{ id: string }>;
 }) {
-  const { id } = await params
-  return <RodDetailClient id={id} />
+  const { id } = await params;
+  return <RodDetailClient id={id} />;
 }
