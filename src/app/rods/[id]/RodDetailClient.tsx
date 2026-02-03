@@ -2,8 +2,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
+import { ROD_TECHNIQUES, normalizeTechniques } from "@/lib/rodTechniques";
 
 type AnyRecord = Record<string, any>
+const HIDE_KEYS = new Set(["rod_techniques", "techniques"]);
 
 const TABLE = 'gear_items'
 
@@ -65,6 +67,15 @@ function formatFeetInches(totalInches: number | null) {
 export default function RodDetailClient({ id, initial }: { id: string; initial?: AnyRecord }) {
   const router = useRouter()
 
+  const [techniques, setTechniques] = useState<string[]>([]);
+
+  function toggleTechnique(name: string) {
+
+    setTechniques((cur) => (cur.includes(name) ? cur.filter((x) => x !== name) : [...cur, name]));
+
+  }
+
+
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
 
@@ -85,8 +96,7 @@ export default function RodDetailClient({ id, initial }: { id: string; initial?:
   useEffect(() => {
     if (initial) return;
     if (!initial) return;
-
-    setOriginal(initial);
+\n\ \ \ \ setOriginal\(initial\);
     setDraft(initial);
 
     const lk = pickFirstExistingKey(initial, ['rod_length_in', 'length_in']);
@@ -462,6 +472,63 @@ export default function RodDetailClient({ id, initial }: { id: string; initial?:
         <h2 className="text-sm font-semibold text-gray-700">Notes</h2>
 
         <label className="grid gap-1">
+
+      <section className="border rounded p-4 space-y-3">
+
+        <h2 className="text-sm font-semibold text-gray-700">Rod Techniques</h2>
+
+
+
+        <div className="flex flex-wrap gap-2">
+
+          {ROD_TECHNIQUES.map((t) => {
+
+            const active = techniques.includes(t)
+
+            return (
+
+              <button
+
+                key={t}
+
+                type="button"
+
+                onClick={() => toggleTechnique(t)}
+
+                className={
+
+                  "px-3 py-1 rounded border text-sm " +
+
+                  (active ? "bg-black text-white border-black" : "bg-white text-black")
+
+                }
+
+                aria-pressed={active}
+
+                disabled={saving}
+
+              >
+
+                {t}
+
+              </button>
+
+            )
+
+          })}
+
+        </div>
+
+
+
+        <div className="text-xs text-gray-500">
+
+          Selected: {techniques.length ? techniques.join(", ") : "none"}
+
+        </div>
+
+      </section>
+
           <div className="text-sm font-medium">Notes</div>
           <textarea
             className="border rounded px-3 py-2 min-h-[90px]"
@@ -531,6 +598,7 @@ export default function RodDetailClient({ id, initial }: { id: string; initial?:
     </main>
   )
 }
+
 
 
 
