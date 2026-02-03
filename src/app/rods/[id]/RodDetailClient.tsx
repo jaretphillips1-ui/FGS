@@ -189,7 +189,7 @@ export default function RodDetailClient({ id, initial }: { id: string; initial?:
   }, [original, draft, editableKeys, lengthKey, lenFeet, lenInches])
 
   useEffect(() => {
-    if (initial) return;
+    // Even if initial is provided, still fetch to hydrate rod_techniques + latest data.
     const seq = ++loadSeq.current
     let cancelled = false
 
