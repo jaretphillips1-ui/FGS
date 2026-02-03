@@ -218,6 +218,7 @@ export default function RodDetailClient({ id, initial }: { id: string; initial?:
 
         if (!cancelled && seq === loadSeq.current) {
           setOriginal(row)
+          setTechniques(normalizeTechniques(extractTechniques(row as AnyRecord)))
           setDraft(row)
 
           const lk = pickFirstExistingKey(row, ['rod_length_in', 'length_in'])
@@ -325,6 +326,7 @@ export default function RodDetailClient({ id, initial }: { id: string; initial?:
 
       const next = { ...original, ...patch }
       setOriginal(next)
+      setTechniques(normalizeTechniques(extractTechniques(next as AnyRecord)))
       setDraft(next)
 
       setSavedMsg('Saved.')
