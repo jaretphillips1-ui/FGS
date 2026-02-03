@@ -182,6 +182,42 @@ export default function RodDetailClient({ id, initial }: { id: string; initial?:
     load()
     return () => { cancelled = true }
   }, [id])
+  
+  async function deleteRod() {
+    if (!original) return
+
+    const name = String(original.name ?? "").trim() || "this rod"
+    const ok = window.confirm(`Delete ${name}? This cannot be undone.`)
+    if (!ok) return
+
+    setSaving(true)
+    setErr(null)
+    setValidationErr(null)
+    setSavedMsg(null)
+
+    try {
+      const sessionRes = await withTimeout(supabase.auth.getSession(), 6000, "auth.getSession()")
+      const user = sessionRes.data.session?.user
+      if (!user) {
+        router.push("/login")
+        return
+      }
+
+      const res = await withTimeout(
+        supabase.from(TABLE).delete().eq("id", id),
+        8000,
+        "gear_items delete"
+      )
+      if (res.error) throw res.error
+
+      router.push("/rods")
+      router.refresh()
+    } catch (e: any) {
+      setErr(e?.message ?? "Failed to delete.")
+    } finally {
+      setSaving(false)
+    }
+  }
 
   async function save() {
     if (!original || !draft) return
@@ -272,6 +308,14 @@ export default function RodDetailClient({ id, initial }: { id: string; initial?:
         <div className="flex items-center gap-2">
           <button className="px-4 py-2 rounded border" onClick={() => router.push('/rods')}>
             Back
+          </button>
+          <button
+            className="px-4 py-2 rounded border border-red-300 text-red-700 disabled:opacity-50"
+            onClick={deleteRod}
+            disabled={saving}
+            title="Delete this rod"
+          >
+            Delete
           </button>
 
           <button
@@ -487,5 +531,8 @@ export default function RodDetailClient({ id, initial }: { id: string; initial?:
     </main>
   )
 }
+
+
+
 
 
