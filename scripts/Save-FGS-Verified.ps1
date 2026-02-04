@@ -1,5 +1,9 @@
 param(
-  [Parameter(Position=0)]
+
+  [Parameter(Position=0,
+  [switch]$DesktopCopy
+)
+]
   [string]$Message = "CHECKPOINT",
   [int]$windowMinutes = 10
 )
