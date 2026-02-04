@@ -4,6 +4,21 @@ import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { ROD_TECHNIQUES, normalizeTechniques } from "@/lib/rodTechniques";
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+
+function shouldIncludeKeyInPatch(key: string, value: unknown): boolean {
+  // Prevent accidental writes to UUID foreign keys like brand_id/product_id unless the value is a real UUID.
+  if (key.endsWith('_id')) {
+    if (value == null) return false
+    if (typeof value !== 'string') return false
+    const s = value.trim()
+    if (!s) return false
+    return UUID_RE.test(s)
+  }
+  return true
+}
+
+
 type AnyRecord = Record<string, unknown>
 
 function extractTechniques(row: AnyRecord | null | undefined): string[] {
@@ -176,6 +191,7 @@ export default function RodDetailClient({ id, initial }: { id: string; initial?:
       if (k === lengthKey) continue
       const before = original[k]
       const after = draft[k]
+      if (!shouldIncludeKeyInPatch(k, after)) continue
       if (!deepEqual(before, after)) return true
     }
 
@@ -300,6 +316,7 @@ export default function RodDetailClient({ id, initial }: { id: string; initial?:
         if (k === lengthKey) continue
         const before = original[k]
         const after = draft[k]
+        if (!shouldIncludeKeyInPatch(k, after)) continue
         if (!deepEqual(before, after)) patch[k] = after
       }
 
@@ -648,6 +665,7 @@ export default function RodDetailClient({ id, initial }: { id: string; initial?:
     </main>
   )
 }
+
 
 
 
