@@ -71,3 +71,7 @@ tools/
 # Junk path that should never be tracked
 pace_SAVESFGSLATEST/
 
+
+# Local saves (not tracked)
+_SAVES/
+
