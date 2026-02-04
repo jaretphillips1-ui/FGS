@@ -51,9 +51,9 @@ if (-not (Test-Path -LiteralPath $zip)) {
   throw "Zip was not created: $zip"
 }
 
-# --- also drop a copy on Desktop for quick access
-$desktop = [Environment]::GetFolderPath("Desktop")
-Copy-Item -LiteralPath $zip -Destination (Join-Path $desktop "FGS_LATEST.zip") -Force
+# DISABLED_DESKTOP_ZIP # --- also drop a copy on Desktop for quick access
+# DISABLED_DESKTOP_ZIP $desktop = [Environment]::GetFolderPath("Desktop")
+# DISABLED_DESKTOP_ZIP Copy-Item -LiteralPath $zip -Destination (Join-Path $desktop "FGS_LATEST.zip") -Force
 
 Write-Host ""
 Write-Host "✅ FGS SAVE COMPLETE" -ForegroundColor Green
@@ -61,4 +61,5 @@ Write-Host "Message : $Message"
 Write-Host "Commit  : $commit"
 Write-Host "Chk     : $chk"
 Write-Host "Zip     : $zip"
-Write-Host "Desktop : $(Join-Path $desktop "FGS_LATEST.zip")"
+# DISABLED_DESKTOP_ZIP Write-Host "Desktop : $(Join-Path $desktop "FGS_LATEST.zip")"
+
