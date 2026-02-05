@@ -4,6 +4,28 @@ import Link from 'next/link'
 import { useEffect, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 
+type RodRow = {
+  id: string
+  name: string
+  status?: string | null
+  rod_techniques?: string[] | null
+}
+
+
+function coerceTechniques(v: unknown): string[] {
+  if (Array.isArray(v)) return v.filter(Boolean).map(String)
+  if (typeof v === 'string') {
+    const s = v.trim()
+    if (!s) return []
+    try {
+      const j = JSON.parse(s)
+      if (Array.isArray(j)) return j.filter(Boolean).map(String)
+    } catch {}
+    // fallback: "A, B, C"
+    return s.split(',').map(x => x.trim()).filter(Boolean)
+  }
+  return []
+}
 type GearItem = {
   id: string
   name: string
@@ -58,7 +80,7 @@ export default function RodLockerPage() {
       const queryRes = await withTimeout(
         supabase
           .from('gear_items')
-          .select('id,name,status,created_at')
+          .select('id,name,status,created_at, rod_techniques')
           .eq('gear_type', 'rod')
           .order('created_at', { ascending: false }),
         8000,
@@ -179,6 +201,23 @@ export default function RodLockerPage() {
             onClick={() => router.push(`/rods/${r.id}`)}
           >
             <div className="font-medium">{r.name}</div>
+            {(() => {
+              const techs = coerceTechniques((r as RodRow).rod_techniques)
+              const uniq = Array.from(new Set(techs))
+              if (uniq.length === 0) return null
+              return (
+                <div className="mt-1 flex flex-wrap gap-1">
+                  {uniq.map((t) => (
+                    <span
+                      key={t}
+                      className="text-xs px-2 py-0.5 rounded bg-gray-100 text-gray-700 border"
+                    >
+                      {t}
+                    </span>
+                  ))}
+                </div>
+              )
+            })()}
             <div className="text-sm text-gray-600">{r.status}</div>
           </li>
         ))}
