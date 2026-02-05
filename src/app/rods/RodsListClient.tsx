@@ -13,21 +13,20 @@ export type RodRowLike = {
   action?: string | null;
   line?: string | null;
   notes?: string | null;
-  rod_techniques?: unknown; // can be string | string[] | JSON string
+  status?: string | null;
+  rod_techniques?: unknown; // string | string[] | JSON string
 };
+
+type SortKey = "name" | "brand" | "status";
 
 function coerceTechniques(input: unknown): string[] {
   if (input == null) return [];
-
-  if (Array.isArray(input)) {
-    return input.map((v) => String(v)).filter(Boolean);
-  }
+  if (Array.isArray(input)) return input.map((v) => String(v)).filter(Boolean);
 
   if (typeof input === "string") {
     const s = input.trim();
     if (!s) return [];
 
-    // JSON array string?
     if (s.startsWith("[") && s.endsWith("]")) {
       try {
         const parsed: unknown = JSON.parse(s);
@@ -37,10 +36,7 @@ function coerceTechniques(input: unknown): string[] {
       }
     }
 
-    // Comma-separated fallback
     if (s.includes(",")) return s.split(",").map((x) => x.trim()).filter(Boolean);
-
-    // Single technique
     return [s];
   }
 
@@ -51,6 +47,34 @@ function setOrDeleteParam(params: URLSearchParams, key: string, value: string) {
   const v = value.trim();
   if (v.length === 0) params.delete(key);
   else params.set(key, v);
+}
+
+function setOrDeleteFlag(params: URLSearchParams, key: string, on: boolean) {
+  if (!on) params.delete(key);
+  else params.set(key, "1");
+}
+
+function getString(sp: ReturnType<typeof useSearchParams>, key: string): string {
+  return sp.get(key) ?? "";
+}
+
+function getBool(sp: ReturnType<typeof useSearchParams>, key: string): boolean {
+  const v = sp.get(key);
+  return v === "1" || v === "true" || v === "yes";
+}
+
+function normalizeStatus(s: string | null | undefined): string {
+  return (s ?? "").trim().toLowerCase();
+}
+
+function isActiveStatus(status: string | null | undefined): boolean {
+  // Keep this intentionally simple + predictable:
+  // Active-only means status must be exactly "active" (case-insensitive).
+  return normalizeStatus(status) === "active";
+}
+
+function cmp(a: string, b: string): number {
+  return a.localeCompare(b, undefined, { sensitivity: "base" });
 }
 
 export default function RodsListClient<T extends RodRowLike>({
@@ -64,58 +88,79 @@ export default function RodsListClient<T extends RodRowLike>({
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
-  // Initialize from URL
-  const initialQ = React.useMemo(() => searchParams.get("q") ?? "", [searchParams]);
-  const initialTech = React.useMemo(() => searchParams.get("tech") ?? "", [searchParams]);
+  // URL -> initial state
+  const initialQ = React.useMemo(() => getString(searchParams, "q"), [searchParams]);
+  const initialTech = React.useMemo(() => getString(searchParams, "tech"), [searchParams]);
+  const initialSort = React.useMemo(() => (getString(searchParams, "sort") as SortKey) || "name", [searchParams]);
+  const initialActiveOnly = React.useMemo(() => getBool(searchParams, "active"), [searchParams]);
 
   const [q, setQ] = React.useState(initialQ);
   const [techFilter, setTechFilter] = React.useState<string>(initialTech);
+  const [sortKey, setSortKey] = React.useState<SortKey>(initialSort);
+  const [activeOnly, setActiveOnly] = React.useState<boolean>(initialActiveOnly);
 
-  // Keep state in sync if user navigates back/forward
+  // Keep state in sync for back/forward navigation
   React.useEffect(() => {
-    const urlQ = searchParams.get("q") ?? "";
-    const urlTech = searchParams.get("tech") ?? "";
+    const urlQ = getString(searchParams, "q");
+    const urlTech = getString(searchParams, "tech");
+    const urlSort = (getString(searchParams, "sort") as SortKey) || "name";
+    const urlActive = getBool(searchParams, "active");
+
     if (urlQ !== q) setQ(urlQ);
     if (urlTech !== techFilter) setTechFilter(urlTech);
+    if (urlSort !== sortKey) setSortKey(urlSort);
+    if (urlActive !== activeOnly) setActiveOnly(urlActive);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
 
-  // Write to URL (debounced for q to avoid spam)
+  // Write to URL (debounced for q)
   React.useEffect(() => {
     const t = setTimeout(() => {
       const params = new URLSearchParams(searchParams.toString());
+
       setOrDeleteParam(params, "q", q);
       setOrDeleteParam(params, "tech", techFilter);
+      setOrDeleteParam(params, "sort", sortKey);
+      setOrDeleteFlag(params, "active", activeOnly);
+
       const qs = params.toString();
       router.replace(qs ? `${pathname}?${qs}` : pathname);
     }, 250);
 
     return () => clearTimeout(t);
-  }, [q, techFilter, router, pathname, searchParams]);
+  }, [q, techFilter, sortKey, activeOnly, router, pathname, searchParams]);
 
   const normalizedQ = q.trim().toLowerCase();
 
-  const filtered = (rows ?? []).filter((r) => {
-    const hay = [
-      r.name,
-      r.brand,
-      r.model,
-      r.power,
-      r.action,
-      r.line,
-      r.notes,
-    ]
-      .filter(Boolean)
-      .join(" ")
-      .toLowerCase();
+  const filtered = (rows ?? [])
+    .filter((r) => {
+      const hay = [
+        r.name,
+        r.brand,
+        r.model,
+        r.power,
+        r.action,
+        r.line,
+        r.notes,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
 
-    const matchesText = normalizedQ.length === 0 || hay.includes(normalizedQ);
+      const matchesText = normalizedQ.length === 0 || hay.includes(normalizedQ);
 
-    const techniques = coerceTechniques(r.rod_techniques);
-    const matchesTech = techFilter.length === 0 || techniques.includes(techFilter);
+      const techniques = coerceTechniques(r.rod_techniques);
+      const matchesTech = techFilter.length === 0 || techniques.includes(techFilter);
 
-    return matchesText && matchesTech;
-  });
+      const matchesActive = !activeOnly || isActiveStatus(r.status);
+
+      return matchesText && matchesTech && matchesActive;
+    })
+    .sort((a, b) => {
+      if (sortKey === "name") return cmp(a.name ?? "", b.name ?? "");
+      if (sortKey === "brand") return cmp(a.brand ?? "", b.brand ?? "");
+      return cmp(a.status ?? "", b.status ?? "");
+    });
 
   return (
     <div>
@@ -140,12 +185,34 @@ export default function RodsListClient<T extends RodRowLike>({
           ))}
         </select>
 
+        <select
+          className="w-full rounded-md border px-3 py-2 text-sm sm:w-48"
+          value={sortKey}
+          onChange={(e) => setSortKey(e.target.value as SortKey)}
+          title="Sort"
+        >
+          <option value="name">Sort: Name</option>
+          <option value="brand">Sort: Brand</option>
+          <option value="status">Sort: Status</option>
+        </select>
+
+        <label className="flex items-center gap-2 text-sm select-none">
+          <input
+            type="checkbox"
+            checked={activeOnly}
+            onChange={(e) => setActiveOnly(e.target.checked)}
+          />
+          Active only
+        </label>
+
         <button
           type="button"
           className="rounded-md border px-3 py-2 text-sm"
           onClick={() => {
             setQ("");
             setTechFilter("");
+            setSortKey("name");
+            setActiveOnly(false);
           }}
         >
           Clear
