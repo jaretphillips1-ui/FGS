@@ -1,5 +1,5 @@
-import RodsListClient from "./RodsListClient";
 "use client";
+import RodsListClient from "./RodsListClient";
 import { useRouter } from 'next/navigation'
 import { normalizeTechniques, sortTechniques } from '@/lib/rodTechniques'
 import Link from 'next/link'
@@ -181,7 +181,7 @@ export default function RodLockerPage() {
       {err && <p className="mt-4 text-sm text-red-600">{err}</p>}
 
       <RodsListClient rows={rows}>
-  {(filteredRows) => (
+  {(filteredRows, setTechniqueFilter) => (
     <>
       <ul className="mt-6 space-y-2">
         {filteredRows.map((r) => (
@@ -198,13 +198,18 @@ export default function RodLockerPage() {
               return (
                 <div className="mt-1 flex flex-wrap gap-1">
                   {uniq.map((t) => (
-                    <span
-                      key={t}
-                      className="text-xs px-2 py-0.5 rounded bg-gray-100 text-gray-700 border"
-                    >
-                      {t}
-                    </span>
-                  ))}
+  <button
+    type="button"
+    key={t}
+    className="text-xs px-2 py-0.5 rounded bg-gray-100 text-gray-700 border hover:bg-gray-200"
+    onClick={(e) => {
+      e.stopPropagation()
+      setTechniqueFilter(t)
+    }}
+  >
+    {t}
+  </button>
+))}
                 </div>
               )
             })()}
@@ -226,6 +231,8 @@ export default function RodLockerPage() {
     </main>
   )
 }
+
+
 
 
 
