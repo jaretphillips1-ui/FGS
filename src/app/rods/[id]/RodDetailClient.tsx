@@ -489,13 +489,13 @@ export default function RodDetailClient({ id, initial }: { id: string; initial?:
     <div className="text-sm font-medium">Status</div>
     <select
       className="border rounded px-3 py-2"
-      value={(normalizeRodStatus(draft.status) === "owned") ? "active" : normalizeRodStatus(draft.status)}
+      value={normalizeRodStatus(draft.status)}
       onChange={(e) =>
         setDraft((d) => ({ ...(d ?? {}), status: normalizeRodStatus(e.target.value) }))
       }
     >
       <option value="">(unset)</option>
-      <option value="active">Active</option>
+      <option value="owned">Active</option>
       <option value="planned">Planned</option>
       <option value="retired">Retired</option>
       <option value="sold">Sold</option>
@@ -736,6 +736,7 @@ export default function RodDetailClient({ id, initial }: { id: string; initial?:
     </main>
   )
 }
+
 
 
 
