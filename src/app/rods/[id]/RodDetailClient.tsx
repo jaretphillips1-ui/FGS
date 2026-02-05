@@ -4,7 +4,6 @@ function normalizeRodStatus(v: unknown): string {
   if (s === "owned") return "active";
   return s;
 }
-"use client"
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
@@ -683,7 +682,6 @@ export default function RodDetailClient({ id, initial }: { id: string; initial?:
     </main>
   )
 }
-
 
 
 
