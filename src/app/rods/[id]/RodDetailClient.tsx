@@ -430,20 +430,23 @@ export default function RodDetailClient({ id, initial }: { id: string; initial?:
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           {'status' in draft && (
-            <label className="grid gap-1">
-              <div className="text-sm font-medium">Status</div>
-              <select
-                className="border rounded px-3 py-2"
-                value={(String(draft.status ?? "").toLowerCase() === "owned") ? "active" : String(draft.status ?? "").toLowerCase()}
-                onChange={(e) =>
-  <option value="">(unset)</option>
-  <option value="active">Active</option>
-  <option value="planned">Planned</option>
-  <option value="retired">Retired</option>
-  <option value="sold">Sold</option>
-</select>
-            </label>
-          )}
+  <label className="grid gap-1">
+    <div className="text-sm font-medium">Status</div>
+    <select
+      className="border rounded px-3 py-2"
+      value={(String(draft.status ?? "").toLowerCase() === "owned") ? "active" : String(draft.status ?? "").toLowerCase()}
+      onChange={(e) =>
+        setDraft((d) => ({ ...(d ?? {}), status: e.target.value }))
+      }
+    >
+      <option value="">(unset)</option>
+      <option value="active">Active</option>
+      <option value="planned">Planned</option>
+      <option value="retired">Retired</option>
+      <option value="sold">Sold</option>
+    </select>
+  </label>
+)}
 
           {'saltwater_ok' in draft && (
             <label className="flex items-center gap-3 border rounded px-3 py-2">
@@ -675,7 +678,6 @@ export default function RodDetailClient({ id, initial }: { id: string; initial?:
     </main>
   )
 }
-
 
 
 
