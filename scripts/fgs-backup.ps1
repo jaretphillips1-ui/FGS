@@ -21,6 +21,7 @@ function Get-FgsRepoRoot {
 
 $repo  = Get-FgsRepoRoot
 
+
 # --- FGS backup markers (for fgs-hard-truth.ps1) ---
 $__fgs_logs = Join-Path $repo "scripts\logs"
 New-Item -ItemType Directory -Force -Path $__fgs_logs | Out-Null
@@ -118,8 +119,9 @@ try {
   if (Test-Path -LiteralPath $saveRoot) {
 
     $keep = 20
-    $timestamped = Get-ChildItem -LiteralPath $saveRoot -File -Filter "FGS_LATEST_*.zip" -ErrorAction SilentlyContinue |
-      Sort-Object LastWriteTime -Descending
+$timestamped = @(Get-ChildItem -LiteralPath $saveRoot -File -Filter "FGS_LATEST_*.zip" -ErrorAction SilentlyContinue |
+        Sort-Object LastWriteTime -Descending
+)
 
     if ($timestamped.Count -gt $keep) {
       $toRemove = $timestamped | Select-Object -Skip $keep
