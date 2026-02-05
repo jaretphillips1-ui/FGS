@@ -121,10 +121,11 @@ export default function RodDetailClient({ id, initial }: { id: string; initial?:
 
 
   function toggleTechnique(name: string) {
-
-    setTechniques((cur) => (cur.includes(name) ? cur.filter((x) => x !== name) : [...cur, name]));
-
-  }
+  const canon = normalizeTechniques([name])[0] ?? name
+  setTechniques((cur) =>
+    cur.includes(canon) ? cur.filter((x) => x !== canon) : [...cur, canon]
+  )
+}
 
 
   const [loading, setLoading] = useState(true)
@@ -673,6 +674,7 @@ export default function RodDetailClient({ id, initial }: { id: string; initial?:
     </main>
   )
 }
+
 
 
 
