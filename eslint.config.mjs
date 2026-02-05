@@ -15,4 +15,12 @@ const eslintConfig = defineConfig([
   ]),
 ]);
 
-export default eslintConfig;
+const __FGS_BASE_CONFIG__ = eslintConfig;
+const __FGS_CONFIG_ARRAY__ = (Array.isArray(__FGS_BASE_CONFIG__) ? __FGS_BASE_CONFIG__.flat() : [__FGS_BASE_CONFIG__]);
+
+const __FGS_EXPORT__ = [
+{ ignores: ["scripts/_bak/**"] },
+  ...__FGS_CONFIG_ARRAY__,
+];
+
+export default __FGS_EXPORT__;

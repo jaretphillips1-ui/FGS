@@ -58,6 +58,8 @@ export function canonicalizeTechnique(input: string): string {
   return aliasToCanonical[key] ?? raw;
 }
 
+export const MAX_TECHNIQUES = 5;
+
 export const ROD_TECHNIQUES: string[] = sortTechniques([
   "Jig",
   "Texas Rig",
@@ -123,4 +125,69 @@ export function normalizeTechniques(v: unknown): string[] {
 
   // single value
   return sortTechniques([canonicalizeTechnique(s)].filter(Boolean));
+}
+
+function uniqPreserveOrder(arr: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const v of arr) {
+    const s = String(v ?? "").trim();
+    if (!s) continue;
+    const key = s.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(s);
+  }
+  return out;
+}
+
+function parseTechniquesRaw(v: unknown): string[] {
+  if (!v) return [];
+  if (Array.isArray(v)) return v.map(String);
+
+  const s = String(v).trim();
+  if (!s) return [];
+
+  const jsonArr = tryParseJsonArray(s);
+  if (jsonArr) return jsonArr.map(String);
+
+  if (s.includes(",")) return s.split(",").map((x) => x.trim()).filter(Boolean);
+
+  return [s];
+}
+
+/**
+ * Normalize techniques while preserving a "primary" in slot 0 if present.
+ * - Canonicalizes labels
+ * - Preserves primary position
+ * - Sorts secondaries alphabetically for cleanliness
+ */
+export function normalizeTechniquesWithPrimary(v: unknown): { primary: string; techniques: string[] } {
+  const raw = parseTechniquesRaw(v).map(canonicalizeTechnique).filter(Boolean);
+  const uniq = uniqPreserveOrder(raw);
+
+  const primary = uniq[0] ?? "";
+  const secondarySorted = sortTechniques(uniq.slice(1));
+  const techniques = primary ? [primary, ...secondarySorted] : secondarySorted;
+
+  return { primary, techniques };
+}
+
+/**
+ * Build a store-ready array where primary is first and the rest are sorted.
+ * Accepts either an array (already chosen) or any normalizeTechniques input.
+ */
+export function buildTechniquesForStore(primary: string | null | undefined, techniques: unknown): string[] {
+  const base = Array.isArray(techniques)
+    ? techniques.map(String)
+    : normalizeTechniquesWithPrimary(techniques).techniques;
+
+  const canon = base.map(canonicalizeTechnique).filter(Boolean);
+  const uniq = uniqPreserveOrder(canon);
+
+  const p = canonicalizeTechnique(String(primary ?? "")).trim();
+  const rest = uniq.filter((t) => t !== p);
+
+  const restSorted = sortTechniques(rest);
+  return p ? [p, ...restSorted] : restSorted;
 }

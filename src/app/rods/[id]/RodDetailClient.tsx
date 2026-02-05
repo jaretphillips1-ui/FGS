@@ -7,7 +7,7 @@ function normalizeRodStatus(v: unknown): string {
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
-import { ROD_TECHNIQUES, normalizeTechniques } from "@/lib/rodTechniques";
+import { ROD_TECHNIQUES, MAX_TECHNIQUES, normalizeTechniquesWithPrimary, buildTechniquesForStore } from "@/lib/rodTechniques";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
@@ -121,17 +121,63 @@ function formatFeetInches(totalInches: number | null) {
 export default function RodDetailClient({ id, initial }: { id: string; initial?: AnyRecord }) {
   const router = useRouter()
 
-  const [techniques, setTechniques] = useState<string[]>([]);
+  const [techniques, setTechniques] = useState<string[]>([]); // stored order: [primary, ...secondaries]
+  const [primaryTechnique, setPrimaryTechnique] = useState<string>("");
 
+  function syncPrimaryFrom(list: string[]) {
+    setPrimaryTechnique(list[0] ?? "");
+  }
 
+  function setPrimary(name: string) {
+    const canon = name.trim();
+    if (!canon) return;
+
+    setTechniques((cur) => {
+      const curSet = cur.includes(canon) ? cur : [...cur, canon];
+      if (curSet.length > MAX_TECHNIQUES) {
+        setValidationErr(`Max ${MAX_TECHNIQUES} techniques. Unselect one before adding another.`);
+        return cur;
+      }
+      setValidationErr(null);
+
+      const rest = curSet.filter((x) => x !== canon);
+      const next = [canon, ...rest];
+      syncPrimaryFrom(next);
+      return next;
+    });
+  }
 
   function toggleTechnique(name: string) {
-  const canon = normalizeTechniques([name])[0] ?? name
-  setTechniques((cur) =>
-    cur.includes(canon) ? cur.filter((x) => x !== canon) : [...cur, canon]
-  )
-}
+    const canon = name.trim();
+    if (!canon) return;
 
+    setTechniques((cur) => {
+      const isOn = cur.includes(canon);
+
+      // removing
+      if (isOn) {
+        const next = cur.filter((x) => x !== canon);
+        // if we removed the primary, pick a new primary
+        if (canon === (cur[0] ?? "")) {
+          syncPrimaryFrom(next);
+        }
+        setValidationErr(null);
+        return next;
+      }
+
+      // adding
+      if (cur.length >= MAX_TECHNIQUES) {
+        setValidationErr(`Max ${MAX_TECHNIQUES} techniques. Unselect one before adding another.`);
+        return cur;
+      }
+
+      setValidationErr(null);
+      const next = [...cur, canon];
+      // if this is the first technique, it becomes primary automatically
+      if (next.length === 1) syncPrimaryFrom(next);
+      return next;
+    });
+  }
 
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -143,10 +189,10 @@ export default function RodDetailClient({ id, initial }: { id: string; initial?:
   const [original, setOriginal] = useState<AnyRecord | null>(null)
 
   const techniquesDirty = useMemo(() => {
-    const a = normalizeTechniques(techniques)
-    const b = normalizeTechniques(extractTechniques(original))
+    const a = buildTechniquesForStore(primaryTechnique, techniques)
+    const b = normalizeTechniquesWithPrimary(extractTechniques(original)).techniques
     return JSON.stringify(a) !== JSON.stringify(b)
-  }, [techniques, original])
+  }, [primaryTechnique, techniques, original])
   const [draft, setDraft] = useState<AnyRecord | null>(null)
 
   // Local-only length editor state (feet+inches) -> saved into total inches column
@@ -160,7 +206,9 @@ export default function RodDetailClient({ id, initial }: { id: string; initial?:
   if (!initial) return
   setOriginal(initial)
   setDraft(initial)
-  setTechniques(normalizeTechniques(extractTechniques(initial)))
+  const norm0 = normalizeTechniquesWithPrimary(extractTechniques(initial))
+  setTechniques(norm0.techniques)
+  setPrimaryTechnique(norm0.primary)
 
   const lk = pickFirstExistingKey(initial, ['rod_length_in', 'length_in'])
   if (lk) {
@@ -240,7 +288,9 @@ export default function RodDetailClient({ id, initial }: { id: string; initial?:
 
         if (!cancelled && seq === loadSeq.current) {
           setOriginal(row)
-          setTechniques(normalizeTechniques(extractTechniques(row as AnyRecord)))
+          const norm1 = normalizeTechniquesWithPrimary(extractTechniques(row as AnyRecord))
+          setTechniques(norm1.techniques)
+          setPrimaryTechnique(norm1.primary)
           setDraft(row)
 
           const lk = pickFirstExistingKey(row, ['rod_length_in', 'length_in'])
@@ -338,8 +388,7 @@ export default function RodDetailClient({ id, initial }: { id: string; initial?:
       }
     // Persist techniques from the techniques UI (only when changed)
     if (techniquesDirty) {
-      const canon = Array.from(new Set(normalizeTechniques(techniques)))
-      ;(patch as AnyRecord).rod_techniques = canon
+      ;(patch as AnyRecord).rod_techniques = buildTechniquesForStore(primaryTechnique, techniques)
     }
       const res = await withTimeout(
         supabase.from(TABLE).update(patch).eq('id', id),
@@ -350,7 +399,9 @@ export default function RodDetailClient({ id, initial }: { id: string; initial?:
 
       const next = { ...original, ...patch }
       setOriginal(next)
-      setTechniques(normalizeTechniques(extractTechniques(next as AnyRecord)))
+      const norm2 = normalizeTechniquesWithPrimary(extractTechniques(next as AnyRecord))
+      setTechniques(norm2.techniques)
+      setPrimaryTechnique(norm2.primary)
       setDraft(next)
 
       setSavedMsg('Saved.')
@@ -399,7 +450,7 @@ export default function RodDetailClient({ id, initial }: { id: string; initial?:
           <button
             className="px-4 py-2 rounded border border-red-300 text-red-700 disabled:opacity-50"
             onClick={deleteRod}
-            disabled={saving}
+            disabled={saving || (!active && techniques.length >= MAX_TECHNIQUES)}
             title="Delete this rod"
           >
             Delete
@@ -561,7 +612,9 @@ export default function RodDetailClient({ id, initial }: { id: string; initial?:
 
         <h2 className="text-sm font-semibold text-gray-700">Rod Techniques</h2>
 
-
+        <div className="text-xs text-gray-600">
+          Primary: {primaryTechnique || "none"} &nbsp;|&nbsp; Max: {MAX_TECHNIQUES}
+        </div>
 
         <div className="flex flex-wrap gap-2">
 
@@ -569,6 +622,7 @@ export default function RodDetailClient({ id, initial }: { id: string; initial?:
 
             const active = techniques.includes(t)
 
+            const isPrimary = primaryTechnique === t
             return (
 
               <button
@@ -577,19 +631,19 @@ export default function RodDetailClient({ id, initial }: { id: string; initial?:
 
                 type="button"
 
-                onClick={() => toggleTechnique(t)}
+                onClick={(e) => { if (active) { if (e.altKey || e.shiftKey) { toggleTechnique(t) } else { setPrimary(t) } } else { toggleTechnique(t) } }}
 
                 className={
 
                   "px-3 py-1 rounded border text-sm " +
 
-                  (active ? "bg-black text-white border-black" : "bg-white text-black")
+                  (isPrimary ? "bg-black text-white border-black" : active ? "bg-gray-100 text-black border-gray-400" : "bg-white text-black")
 
                 }
 
                 aria-pressed={active}
 
-                disabled={saving}
+                disabled={saving || (!active && techniques.length >= MAX_TECHNIQUES)}
 
               >
 
@@ -682,6 +736,10 @@ export default function RodDetailClient({ id, initial }: { id: string; initial?:
     </main>
   )
 }
+
+
+
+
 
 
 
