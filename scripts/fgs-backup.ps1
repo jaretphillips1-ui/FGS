@@ -88,6 +88,25 @@ Write-Host "  Desktop mirrored"
 
 # FGS_BACKUP_MIRROR
 $null = New-FGSBackupMarker -Kind MIRROR
+# ============================
+# FORCE MIRROR TO BOTH DESKTOPS
+# ============================
+try {
+  $saveZip = "C:\Users\lsphi\OneDrive\AI_Workspace\_SAVES\FGS\LATEST\FGS_LATEST.zip"
+  if (Test-Path -LiteralPath $saveZip) {
+    $desktopLocal    = Join-Path $env:USERPROFILE "Desktop\FGS_LATEST.zip"
+    $desktopOneDrive = Join-Path $env:USERPROFILE "OneDrive\Desktop\FGS_LATEST.zip"
 
+    Copy-Item -LiteralPath $saveZip -Destination $desktopLocal    -Force
+    Copy-Item -LiteralPath $saveZip -Destination $desktopOneDrive -Force
 
+    Write-Host "✅ Desktop mirrored (forced):" -ForegroundColor Green
+    Write-Host "  $desktopLocal"
+    Write-Host "  $desktopOneDrive"
+  } else {
+    Write-Warning "Canonical zip missing for mirror: $saveZip"
+  }
+} catch {
+  Write-Warning ("Desktop mirror (forced) failed: " + $_.Exception.Message)
+}
 
