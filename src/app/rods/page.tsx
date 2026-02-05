@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useEffect, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 
+import { sortTechniques } from '@/lib/rodTechniques'
 type RodRow = {
   id: string
   name: string
@@ -203,7 +204,7 @@ export default function RodLockerPage() {
             <div className="font-medium">{r.name}</div>
             {(() => {
               const techs = coerceTechniques((r as RodRow).rod_techniques)
-              const uniq = Array.from(new Set(techs))
+              const uniq = sortTechniques(techs)
               if (uniq.length === 0) return null
               return (
                 <div className="mt-1 flex flex-wrap gap-1">
@@ -229,4 +230,5 @@ export default function RodLockerPage() {
     </main>
   )
 }
+
 
