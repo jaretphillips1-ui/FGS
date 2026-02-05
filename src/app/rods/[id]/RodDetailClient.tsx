@@ -450,7 +450,7 @@ export default function RodDetailClient({ id, initial }: { id: string; initial?:
           <button
             className="px-4 py-2 rounded border border-red-300 text-red-700 disabled:opacity-50"
             onClick={deleteRod}
-            disabled={saving || (!active && techniques.length >= MAX_TECHNIQUES)}
+            disabled={saving}
             title="Delete this rod"
           >
             Delete
@@ -643,7 +643,7 @@ export default function RodDetailClient({ id, initial }: { id: string; initial?:
 
                 aria-pressed={active}
 
-                disabled={saving || (!active && techniques.length >= MAX_TECHNIQUES)}
+                disabled={saving}
 
               >
 
@@ -736,6 +736,7 @@ export default function RodDetailClient({ id, initial }: { id: string; initial?:
     </main>
   )
 }
+
 
 
 
