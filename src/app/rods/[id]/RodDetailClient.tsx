@@ -1,3 +1,18 @@
+const STATUS_OPTIONS = ["Active", "Planned", "Retired"] as const;
+type RodStatus = (typeof STATUS_OPTIONS)[number];
+
+function normalizeStatus(s: string | null | undefined): string {
+  return (s ?? "").trim().toLowerCase();
+}
+
+function coerceStatus(s: string | null | undefined): RodStatus | "" {
+  const n = normalizeStatus(s);
+  if (n === "active") return "Active";
+  if (n === "planned") return "Planned";
+  if (n === "retired") return "Retired";
+  return "";
+}
+
 "use client"
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
