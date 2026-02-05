@@ -383,6 +383,9 @@ export default function RodDetailClient({ id, initial }: { id: string; initial?:
         </div>
 
         <div className="flex items-center gap-2">
+          {(isDirty || techniquesDirty) && (
+            <span className="text-sm text-amber-600">Unsaved changes</span>
+          )}
           <button className="px-4 py-2 rounded border" onClick={() => router.push('/rods')}>
             Back
           </button>
@@ -501,9 +504,13 @@ export default function RodDetailClient({ id, initial }: { id: string; initial?:
               min={1}
               max={10}
               value={piecesKey ? Number(draft[piecesKey] ?? 1) : 1}
-              onChange={(e) =>
-                piecesKey && setDraft((d) => ({ ...(d ?? {}), [piecesKey]: clampInt(Number(e.target.value), 1, 10) }))
-              }
+              onChange={(e) => {
+                if (!piecesKey) return
+                const raw = e.target.value
+                const v = parseInt(raw, 10)
+                const safe = Number.isFinite(v) ? v : 1
+                setDraft((d) => ({ ...(d ?? {}), [piecesKey]: clampInt(safe, 1, 10) }))
+              }}
               disabled={!piecesKey}
             />
             {!piecesKey && <div className="text-xs text-gray-500">Not saved (no pieces column)</div>}
