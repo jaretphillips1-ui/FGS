@@ -332,7 +332,8 @@ export default function RodDetailClient({ id, initial }: { id: string; initial?:
       }
     // Persist techniques from the techniques UI (only when changed)
     if (techniquesDirty) {
-      ;(patch as AnyRecord).rod_techniques = normalizeTechniques(techniques)
+      const canon = Array.from(new Set(normalizeTechniques(techniques)))
+      ;(patch as AnyRecord).rod_techniques = canon
     }
       const res = await withTimeout(
         supabase.from(TABLE).update(patch).eq('id', id),
