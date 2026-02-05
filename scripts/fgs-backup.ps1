@@ -1,3 +1,5 @@
+#@FGS_DESKTOP_MIRROR
+#@FGS_BACKUP_HEADER
 # FGS Backup (no-drift): works when executed as a script OR pasted
 $ErrorActionPreference = "Stop"
 
@@ -68,3 +70,4 @@ Write-Host "  $latestZip"
 Write-Host "  $stampedZip"
 Write-Host "  $notePath"
 Write-Host "  Desktop mirrored"
+
