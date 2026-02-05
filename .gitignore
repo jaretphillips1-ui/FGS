@@ -78,3 +78,6 @@ _SAVES/
 scripts/_bak/
 
 scripts/logs/
+# FGS script local backups (never commit)
+scripts/*.bak_*
+scripts/*.rewritebak_*

@@ -96,17 +96,46 @@ try {
   if (Test-Path -LiteralPath $saveZip) {
     $desktopLocal    = Join-Path $env:USERPROFILE "Desktop\FGS_LATEST.zip"
     $desktopOneDrive = Join-Path $env:USERPROFILE "OneDrive\Desktop\FGS_LATEST.zip"
-
-    Copy-Item -LiteralPath $saveZip -Destination $desktopLocal    -Force
+# (disabled) local desktop mirror
     Copy-Item -LiteralPath $saveZip -Destination $desktopOneDrive -Force
 
     Write-Host "✅ Desktop mirrored (forced):" -ForegroundColor Green
-    Write-Host "  $desktopLocal"
+# (disabled) local desktop mirror path output
     Write-Host "  $desktopOneDrive"
   } else {
     Write-Warning "Canonical zip missing for mirror: $saveZip"
   }
 } catch {
   Write-Warning ("Desktop mirror (forced) failed: " + $_.Exception.Message)
+}
+# ============================
+# FGS RETENTION POLICY
+# - Keep FGS_LATEST.zip + CHECKPOINT.txt always
+# - Keep only the newest 20 timestamped zips (FGS_LATEST_*.zip)
+# ============================
+try {
+  $saveRoot = "C:\Users\lsphi\OneDrive\AI_Workspace\_SAVES\FGS\LATEST"
+  if (Test-Path -LiteralPath $saveRoot) {
+
+    $keep = 20
+    $timestamped = Get-ChildItem -LiteralPath $saveRoot -File -Filter "FGS_LATEST_*.zip" -ErrorAction SilentlyContinue |
+      Sort-Object LastWriteTime -Descending
+
+    if ($timestamped.Count -gt $keep) {
+      $toRemove = $timestamped | Select-Object -Skip $keep
+
+      Write-Host ("🧹 Retention: removing {0} old timestamped zips (keeping newest {1})..." -f $toRemove.Count, $keep) -ForegroundColor Yellow
+
+      foreach ($f in $toRemove) {
+        Remove-Item -LiteralPath $f.FullName -Force
+      }
+    } else {
+      Write-Host ("🧹 Retention: ok (timestamped zips: {0}, keep: {1})" -f $timestamped.Count, $keep) -ForegroundColor Green
+    }
+  } else {
+    Write-Warning ("Retention skipped: save root missing: " + $saveRoot)
+  }
+} catch {
+  Write-Warning ("Retention failed: " + $_.Exception.Message)
 }
 
