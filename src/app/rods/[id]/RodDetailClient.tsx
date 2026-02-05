@@ -1,4 +1,9 @@
 "use client";
+function normalizeRodStatus(v: unknown): string {
+  const s = String(v ?? "").trim().toLowerCase();
+  if (s === "owned") return "active";
+  return s;
+}
 "use client"
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
@@ -434,9 +439,9 @@ export default function RodDetailClient({ id, initial }: { id: string; initial?:
     <div className="text-sm font-medium">Status</div>
     <select
       className="border rounded px-3 py-2"
-      value={(String(draft.status ?? "").toLowerCase() === "owned") ? "active" : String(draft.status ?? "").toLowerCase()}
+      value={(normalizeRodStatus(draft.status) === "owned") ? "active" : normalizeRodStatus(draft.status)}
       onChange={(e) =>
-        setDraft((d) => ({ ...(d ?? {}), status: e.target.value }))
+        setDraft((d) => ({ ...(d ?? {}), status: normalizeRodStatus(e.target.value) }))
       }
     >
       <option value="">(unset)</option>
