@@ -83,3 +83,49 @@ If the answer is “yes”, rewrite.
 
 ---
 Last updated: 2026-02-05
+
+
+# Lessons Learned (Ops / Guardrails)
+
+## 1) Never paste transcripts into PowerShell
+- Do not paste lines that begin with `PS>` or `>>`, or include copied command output.
+- PowerShell will try to execute them as commands, causing cascading errors and sometimes background jobs.
+- Rule: paste **only clean commands** (no prompts, no output).
+
+## 2) Prefer line-based edits over multiline regex for script patching
+- Multiline regex replacements are brittle and can break parentheses/braces, leading to parser errors.
+- Safer approach:
+  - Find a stable anchor line
+  - Insert/replace by line index
+
+## 3) Script backups must never live inside repos
+- Backups like `*.bak_*` inside a repo create clutter and risk accidental commits.
+- Canonical rule: backups go to a **project save root** (e.g. `_SAVES\<Project>\SCRIPT_BACKUPS`).
+- If a repo needs backups, add a guardrail that **moves them out automatically**.
+
+## 4) Always preflight directories before writing or mirroring
+- Before creating/mirroring files:
+  - Print paths (repo, save root, target mirror)
+  - Ensure folders exist
+  - Avoid writing to Desktop/root unless explicitly intended
+
+## 5) When counting pipeline output, force arrays
+- Some pipelines can yield a single object rather than a collection.
+- If you rely on `.Count`, always wrap:
+  - `$x = @( ...pipeline... )`
+
+## 6) Run scripts in the foreground during verification
+- Use `& .\path\script.ps1`
+- Avoid `Start-Job` unless you truly need it (it complicates troubleshooting).
+
+## 7) Guardrails should be self-healing
+- If a known-bad pattern appears (e.g. backups in repo), scripts should:
+  - detect it,
+  - move/archive it,
+  - enforce retention.
+
+## 8) Stop-Job in PS7: don’t assume `-Force`
+- PowerShell 7 may not support `Stop-Job -Force` in your environment.
+- Use:
+  - `Get-Job | Stop-Job -ErrorAction SilentlyContinue`
+  - then `Get-Job | Remove-Job -Force -ErrorAction SilentlyContinue`
