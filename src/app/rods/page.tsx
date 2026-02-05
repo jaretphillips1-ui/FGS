@@ -1,10 +1,9 @@
 "use client";
 import { useRouter } from 'next/navigation'
+import { normalizeTechniques, sortTechniques } from '@/lib/rodTechniques'
 import Link from 'next/link'
 import { useEffect, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabase'
-
-import { sortTechniques } from '@/lib/rodTechniques'
 type RodRow = {
   id: string
   name: string
@@ -13,20 +12,6 @@ type RodRow = {
 }
 
 
-function coerceTechniques(v: unknown): string[] {
-  if (Array.isArray(v)) return v.filter(Boolean).map(String)
-  if (typeof v === 'string') {
-    const s = v.trim()
-    if (!s) return []
-    try {
-      const j = JSON.parse(s)
-      if (Array.isArray(j)) return j.filter(Boolean).map(String)
-    } catch {}
-    // fallback: "A, B, C"
-    return s.split(',').map(x => x.trim()).filter(Boolean)
-  }
-  return []
-}
 type GearItem = {
   id: string
   name: string
@@ -203,7 +188,7 @@ export default function RodLockerPage() {
           >
             <div className="font-medium">{r.name}</div>
             {(() => {
-              const techs = coerceTechniques((r as RodRow).rod_techniques)
+              const techs = normalizeTechniques((r as RodRow).rod_techniques)
               const uniq = sortTechniques(techs)
               if (uniq.length === 0) return null
               return (
@@ -230,5 +215,7 @@ export default function RodLockerPage() {
     </main>
   )
 }
+
+
 
 
