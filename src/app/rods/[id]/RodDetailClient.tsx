@@ -1,18 +1,4 @@
-const STATUS_OPTIONS = ["Active", "Planned", "Retired"] as const;
-type RodStatus = (typeof STATUS_OPTIONS)[number];
-
-function normalizeStatus(s: string | null | undefined): string {
-  return (s ?? "").trim().toLowerCase();
-}
-
-function coerceStatus(s: string | null | undefined): RodStatus | "" {
-  const n = normalizeStatus(s);
-  if (n === "active") return "Active";
-  if (n === "planned") return "Planned";
-  if (n === "retired") return "Retired";
-  return "";
-}
-
+"use client";
 "use client"
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
@@ -448,14 +434,14 @@ export default function RodDetailClient({ id, initial }: { id: string; initial?:
               <div className="text-sm font-medium">Status</div>
               <select
                 className="border rounded px-3 py-2"
-                value={String(draft.status ?? '')}
-                onChange={(e) => setDraft((d) => ({ ...(d ?? {}), status: e.target.value }))}
-              >
-                <option value="owned">owned</option>
-                <option value="planned">planned</option>
-                <option value="retired">retired</option>
-                <option value="sold">sold</option>
-              </select>
+                value={(String(draft.status ?? "").toLowerCase() === "owned") ? "active" : String(draft.status ?? "").toLowerCase()}
+                onChange={(e) =>
+  <option value="">(unset)</option>
+  <option value="active">Active</option>
+  <option value="planned">Planned</option>
+  <option value="retired">Retired</option>
+  <option value="sold">Sold</option>
+</select>
             </label>
           )}
 
