@@ -1,3 +1,4 @@
+import RodsListClient from "./RodsListClient";
 "use client";
 import { useRouter } from 'next/navigation'
 import { normalizeTechniques, sortTechniques } from '@/lib/rodTechniques'
@@ -179,8 +180,11 @@ export default function RodLockerPage() {
 
       {err && <p className="mt-4 text-sm text-red-600">{err}</p>}
 
+      <RodsListClient rows={rows}>
+  {(filteredRows) => (
+    <>
       <ul className="mt-6 space-y-2">
-        {rows.map((r) => (
+        {filteredRows.map((r) => (
           <li
             key={r.id}
             className="border rounded p-3 cursor-pointer hover:bg-gray-50"
@@ -209,12 +213,21 @@ export default function RodLockerPage() {
         ))}
       </ul>
 
-      {rows.length === 0 && !err && (
+
+      
+      {filteredRows.length === 0 && !err && (
+
         <p className="mt-6 text-gray-600">No rods yet. Add one.</p>
+      
       )}
+    </>
+  )}
+</RodsListClient>
     </main>
   )
 }
+
+
 
 
 
