@@ -20,8 +20,23 @@ function Get-FgsRepoRoot {
 }
 
 $repo  = Get-FgsRepoRoot
+
+# --- FGS backup markers (for fgs-hard-truth.ps1) ---
+$__fgs_logs = Join-Path $repo "scripts\logs"
+New-Item -ItemType Directory -Force -Path $__fgs_logs | Out-Null
+function New-FGSBackupMarker([Parameter(Mandatory)][ValidateSet("HEADER","MIRROR")]$Kind) {
+  $stamp = Get-Date -Format "yyyyMMdd_HHmmss"
+  $name  = "FGS_BACKUP_${Kind}_${stamp}.txt"
+  $path  = Join-Path $__fgs_logs $name
+  "FGS BACKUP $Kind @ $(Get-Date -Format o)`r`nRepo: $repo" | Set-Content -Encoding UTF8 -LiteralPath $path
+  return $path
+}
+# ---------------------------------------------------
+# FGS_BACKUP_HEADER
+$null = New-FGSBackupMarker -Kind HEADER
+
 $saves = "C:\Users\lsphi\OneDrive\AI_Workspace\_SAVES\FGS\LATEST"
-$desk  = "C:\Users\lsphi\Desktop"
+$desk  = "C:\Users\lsphi\Desktop\FGS"
 $stamp = Get-Date -Format "yyyyMMdd_HHmmss"
 
 Set-Location $repo
@@ -70,4 +85,9 @@ Write-Host "  $latestZip"
 Write-Host "  $stampedZip"
 Write-Host "  $notePath"
 Write-Host "  Desktop mirrored"
+
+# FGS_BACKUP_MIRROR
+$null = New-FGSBackupMarker -Kind MIRROR
+
+
 
