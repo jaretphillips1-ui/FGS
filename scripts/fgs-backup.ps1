@@ -117,36 +117,8 @@ try {
 # - Never leave scripts\*.bak_* inside the repo (clutter + accidental commits)
 # - Move any found backups to canonical: _SAVES\FGS\SCRIPT_BACKUPS
 # - Keep only newest 50 backup folders; delete anything older than 30 days
+
 # ============================
-try {
-  $scriptBackupRoot = "C:\Users\lsphi\OneDrive\AI_Workspace\_SAVES\FGS\SCRIPT_BACKUPS"
-  New-Item -ItemType Directory -Path $scriptBackupRoot -Force | Out-Null
-
-  $bakFiles = Get-ChildItem -LiteralPath (Join-Path $PSScriptRoot ".") -File -Filter "*.bak_*" -ErrorAction SilentlyContinue
-  if ($bakFiles -and $bakFiles.Count -gt 0) {
-    $stamp = Get-Date -Format "yyyyMMdd_HHmmss"
-    $dest  = Join-Path $scriptBackupRoot ("FGS_SCRIPTS_BAKS_" + $stamp)
-    New-Item -ItemType Directory -Path $dest -Force | Out-Null
-    Write-Host ("🧽 Guardrail: moving {0} script .bak_* file(s) -> {1}" -f $bakFiles.Count, $dest) -ForegroundColor Yellow
-    foreach ($f in $bakFiles) { Move-Item -LiteralPath $f.FullName -Destination (Join-Path $dest $f.Name) -Force }
-  }
-
-  # retention: delete backup folders older than 30 days; keep newest 50
-  $folders = Get-ChildItem -LiteralPath $scriptBackupRoot -Directory -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending
-  if ($folders) {
-    $old = $folders | Where-Object { $_.LastWriteTime -lt (Get-Date).AddDays(-30) }
-    foreach ($d in $old) { Remove-Item -LiteralPath $d.FullName -Recurse -Force -ErrorAction SilentlyContinue }
-
-    $keep = 50
-    if ($folders.Count -gt $keep) {
-      $toRemove = $folders | Select-Object -Skip $keep
-      foreach ($d in $toRemove) { Remove-Item -LiteralPath $d.FullName -Recurse -Force -ErrorAction SilentlyContinue }
-    }
-  }
-} catch {
-  Write-Warning ("Guardrail failed: " + $_.Exception.Message)
-}
-
 # FGS RETENTION POLICY
 # - Keep FGS_LATEST.zip + CHECKPOINT.txt always
 # - Keep only the newest 20 timestamped zips (FGS_LATEST_*.zip)
@@ -157,7 +129,7 @@ try {
 
     $keep = 20
 
-    # IMPORTANT: force array so .Count is always valid
+    # IMPORTANT: force array so .Count is always valid (even 0 or 1 result)
     $timestamped = @(
       Get-ChildItem -LiteralPath $saveRoot -File -Filter "FGS_LATEST_*.zip" -ErrorAction SilentlyContinue |
         Sort-Object LastWriteTime -Descending
@@ -177,5 +149,6 @@ try {
 } catch {
   Write-Warning ("Retention failed: " + $_.Exception.Message)
 }
+
 
 
