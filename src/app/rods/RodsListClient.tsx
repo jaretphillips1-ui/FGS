@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { ROD_TECHNIQUES } from "@/lib/rodTechniques";
 
 export type RodRowLike = {
@@ -43,8 +44,13 @@ function coerceTechniques(input: unknown): string[] {
     return [s];
   }
 
-  // Unknown object types -> ignore
   return [];
+}
+
+function setOrDeleteParam(params: URLSearchParams, key: string, value: string) {
+  const v = value.trim();
+  if (v.length === 0) params.delete(key);
+  else params.set(key, v);
 }
 
 export default function RodsListClient<T extends RodRowLike>({
@@ -54,8 +60,38 @@ export default function RodsListClient<T extends RodRowLike>({
   rows: T[];
   children: (filteredRows: T[], setTechniqueFilter: React.Dispatch<React.SetStateAction<string>>) => React.ReactNode;
 }) {
-  const [q, setQ] = React.useState("");
-  const [techFilter, setTechFilter] = React.useState<string>("");
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
+  // Initialize from URL
+  const initialQ = React.useMemo(() => searchParams.get("q") ?? "", [searchParams]);
+  const initialTech = React.useMemo(() => searchParams.get("tech") ?? "", [searchParams]);
+
+  const [q, setQ] = React.useState(initialQ);
+  const [techFilter, setTechFilter] = React.useState<string>(initialTech);
+
+  // Keep state in sync if user navigates back/forward
+  React.useEffect(() => {
+    const urlQ = searchParams.get("q") ?? "";
+    const urlTech = searchParams.get("tech") ?? "";
+    if (urlQ !== q) setQ(urlQ);
+    if (urlTech !== techFilter) setTechFilter(urlTech);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
+
+  // Write to URL (debounced for q to avoid spam)
+  React.useEffect(() => {
+    const t = setTimeout(() => {
+      const params = new URLSearchParams(searchParams.toString());
+      setOrDeleteParam(params, "q", q);
+      setOrDeleteParam(params, "tech", techFilter);
+      const qs = params.toString();
+      router.replace(qs ? `${pathname}?${qs}` : pathname);
+    }, 250);
+
+    return () => clearTimeout(t);
+  }, [q, techFilter, router, pathname, searchParams]);
 
   const normalizedQ = q.trim().toLowerCase();
 
