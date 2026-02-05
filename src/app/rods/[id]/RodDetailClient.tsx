@@ -685,3 +685,4 @@ export default function RodDetailClient({ id, initial }: { id: string; initial?:
 
 
 
+
