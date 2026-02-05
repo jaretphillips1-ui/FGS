@@ -118,6 +118,7 @@ try {
 # - Move any found backups to canonical: _SAVES\FGS\SCRIPT_BACKUPS
 # - Keep only newest 50 backup folders; delete anything older than 30 days
 
+
 # ============================
 # FGS RETENTION POLICY
 # - Keep FGS_LATEST.zip + CHECKPOINT.txt always
@@ -129,11 +130,9 @@ try {
 
     $keep = 20
 
-    # IMPORTANT: force array so .Count is always valid (even 0 or 1 result)
-    $timestamped = @(
-      Get-ChildItem -LiteralPath $saveRoot -File -Filter "FGS_LATEST_*.zip" -ErrorAction SilentlyContinue |
-        Sort-Object LastWriteTime -Descending
-    )
+    # IMPORTANT: ALWAYS array (even when 0 or 1 file)
+    $timestamped = @(Get-ChildItem -LiteralPath $saveRoot -File -Filter "FGS_LATEST_*.zip" -ErrorAction SilentlyContinue |
+      Sort-Object LastWriteTime -Descending)
 
     if ($timestamped.Count -gt $keep) {
       $toRemove = $timestamped | Select-Object -Skip $keep
@@ -149,6 +148,7 @@ try {
 } catch {
   Write-Warning ("Retention failed: " + $_.Exception.Message)
 }
+
 
 
 
