@@ -1,31 +1,102 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-"--- FGS MIRROR VERIFY (OneDrive Desktop only) ---"
+"--- FGS MIRROR VERIFY (Desktop mirrors) ---"
 
+# Canonical zip (ONE TRUE SAVE root) - REQUIRED
 $saveZip = "C:\Users\lsphi\OneDrive\AI_Workspace\_SAVES\FGS\LATEST\FGS_LATEST.zip"
-$zipOD   = Join-Path $env:USERPROFILE "OneDrive\Desktop\FGS_LATEST.zip"
 
-"SaveZip : $saveZip"
-"OneDrv  : $zipOD"
+# Desktop dirs
+$desktopLocalDir    = Join-Path $env:USERPROFILE "Desktop"
+$desktopOneDriveDir = Join-Path $env:USERPROFILE "OneDrive\Desktop"
 
-foreach ($p in @($saveZip, $zipOD)) {
-  if ([string]::IsNullOrWhiteSpace($p)) { throw "Path is empty/null." }
-  if (-not (Test-Path -LiteralPath $p)) { throw "Missing file: $p" }
+# Targets list:
+# - Canonical required
+# - OneDrive Desktop required IF folder exists
+# - Local Desktop optional (warn if missing)
+$targets = New-Object System.Collections.Generic.List[string]
+$targets.Add($saveZip)
+
+$oneDriveZip = $null
+if (Test-Path -LiteralPath $desktopOneDriveDir) {
+  $oneDriveZip = Join-Path $desktopOneDriveDir "FGS_LATEST.zip"
+  $targets.Add($oneDriveZip)
 }
 
-$info = Get-Item -LiteralPath $saveZip, $zipOD | Select-Object FullName, Length, LastWriteTime
+$localZip = $null
+if (Test-Path -LiteralPath $desktopLocalDir) {
+  $localZip = Join-Path $desktopLocalDir "FGS_LATEST.zip"
+  # NOTE: we do NOT add localZip yet. We only add it if the file exists.
+}
+
+"SaveZip : $saveZip"
+if ($oneDriveZip) { "OneDrv  : $oneDriveZip" }
+if ($localZip)    { "Local  : $localZip" }
+
+# Validate canonical
+if ([string]::IsNullOrWhiteSpace($saveZip)) { throw "Canonical path is empty/null." }
+if (-not (Test-Path -LiteralPath $saveZip)) { throw "Missing canonical zip: $saveZip" }
+
+# Validate OneDrive Desktop mirror (required IF folder exists)
+if ($oneDriveZip) {
+  if (-not (Test-Path -LiteralPath $oneDriveZip)) {
+    throw "Missing required OneDrive Desktop mirror: $oneDriveZip"
+  }
+}
+
+# Local Desktop mirror is OPTIONAL
+$useLocal = $false
+if ($localZip) {
+  if (Test-Path -LiteralPath $localZip) {
+    $targets.Add($localZip)
+    $useLocal = $true
+  } else {
+    Write-Warning "Local Desktop mirror missing (optional): $localZip"
+  }
+}
+
+# De-dupe targets (simple + safe)
+$unique = @()
+foreach ($p in $targets) {
+  if ($unique -notcontains $p) { $unique += $p }
+}
+$targets = $unique
+
 ""
 "--- FILE INFO ---"
-$info | Format-Table -AutoSize
+Get-Item -LiteralPath $targets |
+  Select-Object FullName, Length, LastWriteTime |
+  Format-Table -AutoSize
 
 "--- HASH (SHA256) ---"
-$hSave = (Get-FileHash -LiteralPath $saveZip -Algorithm SHA256 -ErrorAction Stop).Hash
-$hOD   = (Get-FileHash -LiteralPath $zipOD   -Algorithm SHA256 -ErrorAction Stop).Hash
+$hashes = @{}
+foreach ($p in $targets) {
+  $hashes[$p] = (Get-FileHash -LiteralPath $p -Algorithm SHA256 -ErrorAction Stop).Hash
+}
 
-"Save   : $hSave"
-"OneDrv : $hOD"
+$hashes.GetEnumerator() |
+  Sort-Object Name |
+  ForEach-Object { "{0} : {1}" -f $_.Key, $_.Value }
 
-if ($hSave -ne $hOD) { throw "Mirror hash mismatch. STOP." }
+# Compare everyone to canonical
+$hSave = $hashes[$saveZip]
+foreach ($p in $targets) {
+  if ($p -eq $saveZip) { continue }
+  if ($hashes[$p] -ne $hSave) {
+    throw "Mirror hash mismatch vs canonical. STOP.`nCanonical: $saveZip`nMirror: $p"
+  }
+}
 
-"OK: Mirror hash matches canonical zip."
+if ($oneDriveZip) {
+  "OK: OneDrive Desktop mirror hash matches canonical zip."
+} else {
+  Write-Warning "OneDrive Desktop folder not found; mirror check skipped."
+}
+
+if ($useLocal) {
+  "OK: Local Desktop mirror hash matches canonical zip."
+} else {
+  "OK: Local Desktop mirror not enforced."
+}
+
+"OK: Mirror verify complete."
