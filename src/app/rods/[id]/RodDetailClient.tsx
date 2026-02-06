@@ -1,126 +1,152 @@
 "use client";
+
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import { supabase } from "@/lib/supabase";
+import {
+  ROD_TECHNIQUES,
+  normalizeTechniquesWithPrimary,
+  buildTechniquesForStore,
+} from "@/lib/rodTechniques";
+
+type AnyRecord = Record<string, unknown>;
+
+const TABLE = "gear_items";
+
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 function normalizeRodStatus(v: unknown): string {
   const s = String(v ?? "").trim().toLowerCase();
   if (s === "active") return "owned";
   return s;
 }
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { supabase } from '@/lib/supabase'
-import { ROD_TECHNIQUES, MAX_TECHNIQUES, normalizeTechniquesWithPrimary, buildTechniquesForStore } from "@/lib/rodTechniques";
-
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
 function shouldIncludeKeyInPatch(key: string, value: unknown): boolean {
   // Prevent accidental writes to UUID foreign keys like brand_id/product_id unless the value is a real UUID.
-  if (key.endsWith('_id')) {
-    if (value == null) return false
-    if (typeof value !== 'string') return false
-    const s = value.trim()
-    if (!s) return false
-    return UUID_RE.test(s)
+  if (key.endsWith("_id")) {
+    if (value == null) return false;
+    if (typeof value !== "string") return false;
+    const s = value.trim();
+    if (!s) return false;
+    return UUID_RE.test(s);
   }
-  return true
+  return true;
 }
 
-
-type AnyRecord = Record<string, unknown>
-
 function extractTechniques(row: AnyRecord | null | undefined): string[] {
-  if (!row) return []
+  if (!row) return [];
   const v =
     row.rod_techniques ??
     row.techniques ??
     row.technique_list ??
     row.technique ??
     row.rod_technique ??
-    row.techniques_json
+    row.techniques_json;
 
-  if (Array.isArray(v)) return v.filter(Boolean).map(String)
-  if (typeof v === 'string') {
-    const s = v.trim()
-    if (!s) return []
+  if (Array.isArray(v)) return v.filter(Boolean).map(String);
+  if (typeof v === "string") {
+    const s = v.trim();
+    if (!s) return [];
     try {
-      const j = JSON.parse(s)
-      if (Array.isArray(j)) return j.filter(Boolean).map(String)
+      const j = JSON.parse(s);
+      if (Array.isArray(j)) return j.filter(Boolean).map(String);
     } catch {}
-    return s.split(',').map(x => x.trim()).filter(Boolean)
+    return s
+      .split(",")
+      .map((x) => x.trim())
+      .filter(Boolean);
   }
-  return []
+  return [];
 }
-
-
-const TABLE = 'gear_items'
 
 // Keys we never want to edit/save from the UI
 const READONLY_KEYS = new Set([
-  'id',
-  'created_at',
-  'updated_at',
-  'owner_id',
-  'gear_type',
-])
+  "id",
+  "created_at",
+  "updated_at",
+  "owner_id",
+  "gear_type",
+]);
 
 // Keys we never want to show/edit in the generic editor section
 const HIDE_KEYS = new Set([
-  'rod_techniques',
-  'techniques',
-  'technique_list',
-  'technique',
-  'rod_technique',
-  'techniques_json',
-])
-
+  "rod_techniques",
+  "techniques",
+  "technique_list",
+  "technique",
+  "rod_technique",
+  "techniques_json",
+]);
 
 function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
   return Promise.race([
     p,
     new Promise<T>((_, rej) =>
-      setTimeout(() => rej(new Error(label + ' timed out after ' + ms + 'ms')), ms)
+      setTimeout(() => rej(new Error(label + " timed out after " + ms + "ms")), ms)
     ),
-  ])
+  ]);
 }
 
 function isPlainObject(v: unknown) {
-  return v !== null && typeof v === 'object' && !Array.isArray(v)
+  return v !== null && typeof v === "object" && !Array.isArray(v);
 }
 
 function deepEqual(a: unknown, b: unknown) {
-  if (a === b) return true
-  if (Array.isArray(a) && Array.isArray(b)) return JSON.stringify(a) === JSON.stringify(b)
-  if (isPlainObject(a) && isPlainObject(b)) return JSON.stringify(a) === JSON.stringify(b)
-  return false
+  if (a === b) return true;
+  if (Array.isArray(a) && Array.isArray(b)) return JSON.stringify(a) === JSON.stringify(b);
+  if (isPlainObject(a) && isPlainObject(b)) return JSON.stringify(a) === JSON.stringify(b);
+  return false;
 }
 
 function clampInt(n: number, min: number, max: number) {
-  if (!Number.isFinite(n)) return min
-  return Math.max(min, Math.min(max, Math.trunc(n)))
+  if (!Number.isFinite(n)) return min;
+  return Math.max(min, Math.min(max, Math.trunc(n)));
 }
 
 function toTitle(s: string) {
   return s
-    .replace(/^rod_/, '')
-    .replace(/_/g, ' ')
-    .replace(/\b\w/g, (m) => m.toUpperCase())
+    .replace(/^rod_/, "")
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (m) => m.toUpperCase());
 }
 
 function pickFirstExistingKey(obj: AnyRecord | null, keys: string[]) {
-  if (!obj) return null
-  for (const k of keys) if (k in obj) return k
-  return null
+  if (!obj) return null;
+  for (const k of keys) if (k in obj) return k;
+  return null;
 }
 
 function formatFeetInches(totalInches: number | null) {
-  if (totalInches == null || !Number.isFinite(totalInches)) return { ft: 0, inch: 0, total: null as number | null }
-  const t = clampInt(totalInches, 0, 2000)
-  const ft = Math.floor(t / 12)
-  const inch = t % 12
-  return { ft, inch, total: t }
+  if (totalInches == null || !Number.isFinite(totalInches)) {
+    return { ft: 0, inch: 0, total: null as number | null };
+  }
+  const t = clampInt(totalInches, 0, 2000);
+  const ft = Math.floor(t / 12);
+  const inch = t % 12;
+  return { ft, inch, total: t };
 }
 
-export default function RodDetailClient({ id, initial }: { id: string; initial?: AnyRecord }) {
-  const router = useRouter()
+export default function RodDetailClient({
+  id,
+  initial,
+}: {
+  id: string;
+  initial?: AnyRecord;
+}) {
+  const router = useRouter();
 
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  const [err, setErr] = useState<string | null>(null);
+  const [validationErr, setValidationErr] = useState<string | null>(null);
+  const [savedMsg, setSavedMsg] = useState<string | null>(null);
+
+  const [original, setOriginal] = useState<AnyRecord | null>(null);
+  const [draft, setDraft] = useState<AnyRecord | null>(null);
+
+  // Techniques
   const [techniques, setTechniques] = useState<string[]>([]); // stored order: [primary, ...secondaries]
   const [primaryTechnique, setPrimaryTechnique] = useState<string>("");
 
@@ -129,17 +155,13 @@ export default function RodDetailClient({ id, initial }: { id: string; initial?:
   }
 
   function setPrimary(name: string) {
-    const canon = name.trim();
+    const canon = String(name ?? "").trim();
     if (!canon) return;
+
+    setValidationErr(null);
 
     setTechniques((cur) => {
       const curSet = cur.includes(canon) ? cur : [...cur, canon];
-      if (curSet.length > MAX_TECHNIQUES) {
-        setValidationErr(`Max ${MAX_TECHNIQUES} techniques. Unselect one before adding another.`);
-        return cur;
-      }
-      setValidationErr(null);
-
       const rest = curSet.filter((x) => x !== canon);
       const next = [canon, ...rest];
       syncPrimaryFrom(next);
@@ -147,278 +169,318 @@ export default function RodDetailClient({ id, initial }: { id: string; initial?:
     });
   }
 
-function toggleTechnique(t: string) {
-  setError("");
-  setTechniques((prev) => {
-    const isOn = prev.includes(t);
+  function toggleTechnique(t: string) {
+    const canon = String(t ?? "").trim();
+    if (!canon) return;
 
-    // always allow REMOVE
-    if (isOn) {
-      return prev.filter((x) => x !== t);
-    }
+    setValidationErr(null);
 
-    // only block ADD
-    if (prev.length >= MAX_TECHNIQUES) {
-      setError(`Max ${MAX_TECHNIQUES} techniques. Unselect one before adding another.`);
-      return prev;
-    }
+    setTechniques((prev) => {
+      const isOn = prev.includes(canon);
 
-    return [...prev, t];
-  });
-}
+      // If already selected:
+      // - if NOT primary => make it primary (reorder) instead of removing
+      // - if IS primary => remove it (and promote next)
+      if (isOn) {
+        if (primaryTechnique && primaryTechnique !== canon) {
+          const rest = prev.filter((x) => x !== canon);
+          const next = [canon, ...rest];
+          syncPrimaryFrom(next);
+          return next;
+        }
 
-  const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
+        const next = prev.filter((x) => x !== canon);
+        const nextPrimary = next[0] ?? "";
+        setPrimaryTechnique(nextPrimary);
+        return next;
+      }
 
-  const [err, setErr] = useState<string | null>(null)
-  const [validationErr, setValidationErr] = useState<string | null>(null)
-  const [savedMsg, setSavedMsg] = useState<string | null>(null)
-
-  const [original, setOriginal] = useState<AnyRecord | null>(null)
-
-  const techniquesDirty = useMemo(() => {
-    const a = buildTechniquesForStore(primaryTechnique, techniques)
-    const b = normalizeTechniquesWithPrimary(extractTechniques(original)).techniques
-    return JSON.stringify(a) !== JSON.stringify(b)
-  }, [primaryTechnique, techniques, original])
-  const [draft, setDraft] = useState<AnyRecord | null>(null)
+      // ADD
+      const next = [...prev, canon];
+      if (!primaryTechnique) setPrimaryTechnique(canon);
+      return next;
+    });
+  }
 
   // Local-only length editor state (feet+inches) -> saved into total inches column
-  const [lenFeet, setLenFeet] = useState(7)
-  const [lenInches, setLenInches] = useState(0)
+  const [lenFeet, setLenFeet] = useState(7);
+  const [lenInches, setLenInches] = useState(0);
 
-  const loadSeq = useRef(0)
+  const loadSeq = useRef(0);
 
   // If the server already provided the row, seed state and skip the initial client fetch.
   useEffect(() => {
-  if (!initial) return
-  setOriginal(initial)
-  setDraft(initial)
-  const norm0 = normalizeTechniquesWithPrimary(extractTechniques(initial))
-  setTechniques(norm0.techniques)
-  setPrimaryTechnique(norm0.primary)
+    if (!initial) return;
 
-  const lk = pickFirstExistingKey(initial, ['rod_length_in', 'length_in'])
-  if (lk) {
-    const total = Number((initial as AnyRecord)[lk] ?? 0)
-    if (Number.isFinite(total) && total >= 0) {
-      const feet = Math.floor(total / 12)
-      const inch = total % 12
-      setLenFeet(feet)
-      setLenInches(inch)
-    }
-  }
+    setOriginal(initial);
+    setDraft(initial);
 
-  setLoading(false)
-}, [initial])
-// Detect which columns exist on this row (schema-safe mapping)
-  const lengthKey = useMemo(() => pickFirstExistingKey(original, ['rod_length_in', 'length_in']), [original])
-  const piecesKey = useMemo(() => pickFirstExistingKey(original, ['rod_pieces', 'pieces']), [original])
-  const powerKey = useMemo(() => pickFirstExistingKey(original, ['rod_power', 'power']), [original])
-  const actionKey = useMemo(() => pickFirstExistingKey(original, ['rod_action', 'action']), [original])
-  const notesKey = useMemo(() => pickFirstExistingKey(original, ['rod_notes', 'notes']), [original])
-  const storageKey = useMemo(() => pickFirstExistingKey(original, ['rod_storage_note', 'storage_note']), [original])
+    const norm0 = normalizeTechniquesWithPrimary(extractTechniques(initial));
+    setTechniques(norm0.techniques);
+    setPrimaryTechnique(norm0.primary);
 
-  const editableKeys = useMemo(() => {
-    if (!original) return []
-    return Object.keys(original)
-      .filter((k) => !READONLY_KEYS.has(k) && !HIDE_KEYS.has(k))
-      .sort()
-  }, [original])
-
-  const isDirty = useMemo(() => {
-    if (!original || !draft) return false
-
-    for (const k of editableKeys) {
-      if (k === lengthKey) continue
-      const before = original[k]
-      const after = draft[k]
-      if (!shouldIncludeKeyInPatch(k, after)) continue
-      if (!deepEqual(before, after)) return true
-    }
-
-    if (lengthKey) {
-      const base = Number(original[lengthKey] ?? 0)
-      const curTotal = clampInt(Number(lenFeet), 0, 12) * 12 + clampInt(Number(lenInches), 0, 11)
-      if (clampInt(base, 0, 2000) !== curTotal) return true
-    }
-
-    return false
-  }, [original, draft, editableKeys, lengthKey, lenFeet, lenInches])
-
-  useEffect(() => {
-    // Even if initial is provided, still fetch to hydrate rod_techniques + latest data.
-    const seq = ++loadSeq.current
-    let cancelled = false
-
-    async function load() {
-      setLoading(true)
-      setErr(null)
-
-      try {
-        const sessionRes = await withTimeout(supabase.auth.getSession(), 6000, 'auth.getSession()')
-        const user = sessionRes.data.session?.user
-        if (!user) {
-          router.push('/login')
-          return
-        }
-
-        const res = await withTimeout(
-          supabase.from(TABLE).select('*').eq('id', id).single(),
-          8000,
-          'gear_items select'
-        )
-
-        if (res.error) throw res.error
-        const row = res.data as AnyRecord
-
-        if (row?.gear_type !== 'rod') setErr(`Warning: gear_type is "${String(row?.gear_type ?? '')}".`)
-
-        if (!cancelled && seq === loadSeq.current) {
-          setOriginal(row)
-          const norm1 = normalizeTechniquesWithPrimary(extractTechniques(row as AnyRecord))
-          setTechniques(norm1.techniques)
-          setPrimaryTechnique(norm1.primary)
-          setDraft(row)
-
-          const lk = pickFirstExistingKey(row, ['rod_length_in', 'length_in'])
-          if (lk) {
-            const { ft, inch } = formatFeetInches(Number(row[lk] ?? 0))
-            setLenFeet(ft)
-            setLenInches(inch)
-          }
-        }
-      } catch (e: unknown) {
-        if (!cancelled && seq === loadSeq.current) setErr(e?.message ?? 'Failed to load rod.')
-      } finally {
-        if (!cancelled && seq === loadSeq.current) setLoading(false)
+    const lk = pickFirstExistingKey(initial, ["rod_length_in", "length_in"]);
+    if (lk) {
+      const total = Number((initial as AnyRecord)[lk] ?? 0);
+      if (Number.isFinite(total) && total >= 0) {
+        const feet = Math.floor(total / 12);
+        const inch = total % 12;
+        setLenFeet(feet);
+        setLenInches(inch);
       }
     }
 
-    load()
-    return () => { cancelled = true }
-  }, [id, initial, router])
-  
+    setLoading(false);
+  }, [initial]);
+
+  // Detect which columns exist on this row (schema-safe mapping)
+  const lengthKey = useMemo(
+    () => pickFirstExistingKey(original, ["rod_length_in", "length_in"]),
+    [original]
+  );
+  const piecesKey = useMemo(
+    () => pickFirstExistingKey(original, ["rod_pieces", "pieces"]),
+    [original]
+  );
+  const powerKey = useMemo(
+    () => pickFirstExistingKey(original, ["rod_power", "power"]),
+    [original]
+  );
+  const actionKey = useMemo(
+    () => pickFirstExistingKey(original, ["rod_action", "action"]),
+    [original]
+  );
+  const notesKey = useMemo(
+    () => pickFirstExistingKey(original, ["rod_notes", "notes"]),
+    [original]
+  );
+  const storageKey = useMemo(
+    () => pickFirstExistingKey(original, ["rod_storage_note", "storage_note"]),
+    [original]
+  );
+
+  const editableKeys = useMemo(() => {
+    if (!original) return [];
+    return Object.keys(original)
+      .filter((k) => !READONLY_KEYS.has(k) && !HIDE_KEYS.has(k))
+      .sort();
+  }, [original]);
+
+  const techniquesDirty = useMemo(() => {
+    const a = buildTechniquesForStore(primaryTechnique, techniques);
+    const b = normalizeTechniquesWithPrimary(extractTechniques(original)).techniques;
+    return JSON.stringify(a) !== JSON.stringify(b);
+  }, [primaryTechnique, techniques, original]);
+
+  const isDirty = useMemo(() => {
+    if (!original || !draft) return false;
+
+    for (const k of editableKeys) {
+      if (k === lengthKey) continue;
+      const before = original[k];
+      const after = draft[k];
+      if (!shouldIncludeKeyInPatch(k, after)) continue;
+      if (!deepEqual(before, after)) return true;
+    }
+
+    if (lengthKey) {
+      const base = Number(original[lengthKey] ?? 0);
+      const curTotal =
+        clampInt(Number(lenFeet), 0, 12) * 12 + clampInt(Number(lenInches), 0, 11);
+      if (clampInt(base, 0, 2000) !== curTotal) return true;
+    }
+
+    return false;
+  }, [original, draft, editableKeys, lengthKey, lenFeet, lenInches]);
+
+  useEffect(() => {
+    // Even if initial is provided, still fetch to hydrate rod_techniques + latest data.
+    const seq = ++loadSeq.current;
+    let cancelled = false;
+
+    async function load() {
+      setLoading(true);
+      setErr(null);
+
+      try {
+        const sessionRes = await withTimeout(supabase.auth.getSession(), 6000, "auth.getSession()");
+        const user = sessionRes.data.session?.user;
+        if (!user) {
+          router.push("/login");
+          return;
+        }
+
+        const res = await withTimeout(
+          supabase.from(TABLE).select("*").eq("id", id).single(),
+          8000,
+          "gear_items select"
+        );
+
+        if (res.error) throw res.error;
+        const row = res.data as AnyRecord;
+
+        if (row?.gear_type !== "rod") {
+          setErr(`Warning: gear_type is "${String(row?.gear_type ?? "")}".`);
+        }
+
+        if (!cancelled && seq === loadSeq.current) {
+          setOriginal(row);
+
+          const norm1 = normalizeTechniquesWithPrimary(extractTechniques(row));
+          setTechniques(norm1.techniques);
+          setPrimaryTechnique(norm1.primary);
+
+          setDraft(row);
+
+          const lk = pickFirstExistingKey(row, ["rod_length_in", "length_in"]);
+          if (lk) {
+            const { ft, inch } = formatFeetInches(Number(row[lk] ?? 0));
+            setLenFeet(ft);
+            setLenInches(inch);
+          }
+        }
+      } catch (e: unknown) {
+        if (!cancelled && seq === loadSeq.current) {
+          setErr((e as any)?.message ?? "Failed to load rod.");
+        }
+      } finally {
+        if (!cancelled && seq === loadSeq.current) setLoading(false);
+      }
+    }
+
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [id, initial, router]);
+
   async function deleteRod() {
-    if (!original) return
+    if (!original) return;
 
-    const name = String(original.name ?? "").trim() || "this rod"
-    const ok = window.confirm(`Delete ${name}? This cannot be undone.`)
-    if (!ok) return
+    const name = String(original.name ?? "").trim() || "this rod";
+    const ok = window.confirm(`Delete ${name}? This cannot be undone.`);
+    if (!ok) return;
 
-    setSaving(true)
-    setErr(null)
-    setValidationErr(null)
-    setSavedMsg(null)
+    setSaving(true);
+    setErr(null);
+    setValidationErr(null);
+    setSavedMsg(null);
 
     try {
-      const sessionRes = await withTimeout(supabase.auth.getSession(), 6000, "auth.getSession()")
-      const user = sessionRes.data.session?.user
+      const sessionRes = await withTimeout(supabase.auth.getSession(), 6000, "auth.getSession()");
+      const user = sessionRes.data.session?.user;
       if (!user) {
-        router.push("/login")
-        return
+        router.push("/login");
+        return;
       }
 
       const res = await withTimeout(
         supabase.from(TABLE).delete().eq("id", id),
         8000,
         "gear_items delete"
-      )
-      if (res.error) throw res.error
+      );
+      if (res.error) throw res.error;
 
-      router.push("/rods")
-      router.refresh()
+      router.push("/rods");
+      router.refresh();
     } catch (e: unknown) {
-      setErr(e?.message ?? "Failed to delete.")
+      setErr((e as any)?.message ?? "Failed to delete.");
     } finally {
-      setSaving(false)
+      setSaving(false);
     }
   }
 
   async function save() {
-    if (!original || !draft) return
+    if (!original || !draft) return;
 
-    setSaving(true)
-    setErr(null)
-    setValidationErr(null)
-    setSavedMsg(null)
+    setSaving(true);
+    setErr(null);
+    setValidationErr(null);
+    setSavedMsg(null);
 
-    const trimmedName = String(draft.name ?? '').trim()
+    const trimmedName = String(draft.name ?? "").trim();
     if (!trimmedName) {
-      setSaving(false)
-      setValidationErr('Name is required.')
-      return
+      setSaving(false);
+      setValidationErr("Name is required.");
+      return;
     }
 
     try {
-      const patch: AnyRecord = {}
+      const patch: AnyRecord = {};
 
-      if (String(original.name ?? '') !== trimmedName) patch.name = trimmedName
+      if (String(original.name ?? "") !== trimmedName) patch.name = trimmedName;
 
       for (const k of editableKeys) {
-        if (k === 'name') continue
-        if (k === lengthKey) continue
-        const before = original[k]
-        const after = draft[k]
-        if (!shouldIncludeKeyInPatch(k, after)) continue
-        if (!deepEqual(before, after)) patch[k] = after
+        if (k === "name") continue;
+        if (k === lengthKey) continue;
+        const before = original[k];
+        const after = draft[k];
+        if (!shouldIncludeKeyInPatch(k, after)) continue;
+        if (!deepEqual(before, after)) patch[k] = after;
       }
 
       if (lengthKey) {
-        const curTotal = clampInt(Number(lenFeet), 0, 12) * 12 + clampInt(Number(lenInches), 0, 11)
-        const base = clampInt(Number(original[lengthKey] ?? 0), 0, 2000)
-        if (curTotal !== base) patch[lengthKey] = curTotal
+        const curTotal =
+          clampInt(Number(lenFeet), 0, 12) * 12 + clampInt(Number(lenInches), 0, 11);
+        const base = clampInt(Number(original[lengthKey] ?? 0), 0, 2000);
+        if (curTotal !== base) patch[lengthKey] = curTotal;
       }
 
-      if (Object.keys(patch).length === 0 && !techniquesDirty) {
-        setSavedMsg('No changes to save.')
-        return
+      // Persist techniques from the techniques UI (only when changed)
+      if (techniquesDirty) {
+        patch.rod_techniques = buildTechniquesForStore(primaryTechnique, techniques);
       }
-    // Persist techniques from the techniques UI (only when changed)
-    if (techniquesDirty) {
-      ;(patch as AnyRecord).rod_techniques = buildTechniquesForStore(primaryTechnique, techniques)
-    }
+
+      if (Object.keys(patch).length === 0) {
+        setSavedMsg("No changes to save.");
+        return;
+      }
+
       const res = await withTimeout(
-        supabase.from(TABLE).update(patch).eq('id', id),
+        supabase.from(TABLE).update(patch).eq("id", id),
         8000,
-        'gear_items update'
-      )
-      if (res.error) throw res.error
+        "gear_items update"
+      );
+      if (res.error) throw res.error;
 
-      const next = { ...original, ...patch }
-      setOriginal(next)
-      const norm2 = normalizeTechniquesWithPrimary(extractTechniques(next as AnyRecord))
-      setTechniques(norm2.techniques)
-      setPrimaryTechnique(norm2.primary)
-      setDraft(next)
+      const next = { ...original, ...patch };
+      setOriginal(next);
 
-      setSavedMsg('Saved.')
+      const norm2 = normalizeTechniquesWithPrimary(extractTechniques(next));
+      setTechniques(norm2.techniques);
+      setPrimaryTechnique(norm2.primary);
+
+      setDraft(next);
+
+      setSavedMsg("Saved.");
     } catch (e: unknown) {
-      setErr(e?.message ?? 'Failed to save.')
+      setErr((e as any)?.message ?? "Failed to save.");
     } finally {
-      setSaving(false)
-      setTimeout(() => setSavedMsg(null), 1500)
+      setSaving(false);
+      setTimeout(() => setSavedMsg(null), 1500);
     }
   }
 
-  if (loading) return <main className="p-6">Loading…</main>
-  if (!draft || !original) return <main className="p-6">Not found.</main>
+  if (loading) return <main className="p-6">Loading…</main>;
+  if (!draft || !original) return <main className="p-6">Not found.</main>;
 
-  const title = (String(draft.name ?? '').trim() || 'Rod') as string
+  const title = (String(draft.name ?? "").trim() || "Rod") as string;
 
-  const renderedKeys = new Set<string>([
-    'name',
-    'status',
-    'saltwater_ok',
-    lengthKey ?? '',
-    piecesKey ?? '',
-    powerKey ?? '',
-    actionKey ?? '',
-    notesKey ?? '',
-    storageKey ?? '',
-  ].filter(Boolean))
+  const renderedKeys = new Set<string>(
+    [
+      "name",
+      "status",
+      "saltwater_ok",
+      lengthKey ?? "",
+      piecesKey ?? "",
+      powerKey ?? "",
+      actionKey ?? "",
+      notesKey ?? "",
+      storageKey ?? "",
+    ].filter(Boolean)
+  );
 
-  const otherKeys = editableKeys.filter((k) => !renderedKeys.has(k))
+  const otherKeys = editableKeys.filter((k) => !renderedKeys.has(k));
 
   return (
     <main className="max-w-3xl mx-auto p-6 space-y-4">
@@ -432,9 +494,10 @@ function toggleTechnique(t: string) {
           {(isDirty || techniquesDirty) && (
             <span className="text-sm text-amber-600">Unsaved changes</span>
           )}
-          <button className="px-4 py-2 rounded border" onClick={() => router.push('/rods')}>
+          <button className="px-4 py-2 rounded border" onClick={() => router.push("/rods")}>
             Back
           </button>
+
           <button
             className="px-4 py-2 rounded border border-red-300 text-red-700 disabled:opacity-50"
             onClick={deleteRod}
@@ -448,16 +511,20 @@ function toggleTechnique(t: string) {
             className="px-4 py-2 rounded bg-black text-white disabled:opacity-50"
             onClick={save}
             disabled={saving || !(isDirty || techniquesDirty)}
-            title={!(isDirty || techniquesDirty) ? 'No changes' : 'Save changes'}
+            title={!(isDirty || techniquesDirty) ? "No changes" : "Save changes"}
           >
-            {saving ? 'Saving…' : 'Save'}
+            {saving ? "Saving…" : "Save"}
           </button>
         </div>
       </div>
 
       {err && <div className="border rounded p-3 bg-red-50 text-red-800">{err}</div>}
-      {validationErr && <div className="border rounded p-3 bg-red-50 text-red-800">{validationErr}</div>}
-      {savedMsg && <div className="border rounded p-3 bg-green-50 text-green-800">{savedMsg}</div>}
+      {validationErr && (
+        <div className="border rounded p-3 bg-red-50 text-red-800">{validationErr}</div>
+      )}
+      {savedMsg && (
+        <div className="border rounded p-3 bg-green-50 text-green-800">{savedMsg}</div>
+      )}
 
       <section className="border rounded p-4 space-y-4">
         <h2 className="text-sm font-semibold text-gray-700">Basics</h2>
@@ -466,37 +533,42 @@ function toggleTechnique(t: string) {
           <div className="text-sm font-medium">Name</div>
           <input
             className="border rounded px-3 py-2"
-            value={String(draft.name ?? '')}
+            value={String(draft.name ?? "")}
             onChange={(e) => setDraft((d) => ({ ...(d ?? {}), name: e.target.value }))}
           />
         </label>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {'status' in draft && (
-  <label className="grid gap-1">
-    <div className="text-sm font-medium">Status</div>
-    <select
-      className="border rounded px-3 py-2"
-      value={normalizeRodStatus(draft.status)}
-      onChange={(e) =>
-        setDraft((d) => ({ ...(d ?? {}), status: normalizeRodStatus(e.target.value) }))
-      }
-    >
-      <option value="">(unset)</option>
-      <option value="owned">Active</option>
-      <option value="planned">Planned</option>
-      <option value="retired">Retired</option>
-      <option value="sold">Sold</option>
-    </select>
-  </label>
-)}
+          {"status" in draft && (
+            <label className="grid gap-1">
+              <div className="text-sm font-medium">Status</div>
+              <select
+                className="border rounded px-3 py-2"
+                value={normalizeRodStatus((draft as AnyRecord).status)}
+                onChange={(e) =>
+                  setDraft((d) => ({
+                    ...(d ?? {}),
+                    status: normalizeRodStatus(e.target.value),
+                  }))
+                }
+              >
+                <option value="">(unset)</option>
+                <option value="owned">Owned</option>
+                <option value="planned">Planned</option>
+                <option value="retired">Retired</option>
+                <option value="sold">Sold</option>
+              </select>
+            </label>
+          )}
 
-          {'saltwater_ok' in draft && (
+          {"saltwater_ok" in draft && (
             <label className="flex items-center gap-3 border rounded px-3 py-2">
               <input
                 type="checkbox"
-                checked={!!draft.saltwater_ok}
-                onChange={(e) => setDraft((d) => ({ ...(d ?? {}), saltwater_ok: e.target.checked }))}
+                checked={!!(draft as AnyRecord).saltwater_ok}
+                onChange={(e) =>
+                  setDraft((d) => ({ ...(d ?? {}), saltwater_ok: e.target.checked }))
+                }
               />
               <span className="text-sm font-medium">Saltwater OK</span>
             </label>
@@ -539,7 +611,7 @@ function toggleTechnique(t: string) {
             <div className="text-sm font-medium">Preview</div>
             <div className="border rounded px-3 py-2 text-sm text-gray-700">
               {clampInt(Number(lenFeet), 0, 12)}&apos; {clampInt(Number(lenInches), 0, 11)}&quot;
-              {lengthKey ? '' : <span className="text-gray-500"> — not saved</span>}
+              {lengthKey ? "" : <span className="text-gray-500"> — not saved</span>}
             </div>
           </div>
         </div>
@@ -552,13 +624,13 @@ function toggleTechnique(t: string) {
               type="number"
               min={1}
               max={10}
-              value={piecesKey ? Number(draft[piecesKey] ?? 1) : 1}
+              value={piecesKey ? Number((draft as AnyRecord)[piecesKey] ?? 1) : 1}
               onChange={(e) => {
-                if (!piecesKey) return
-                const raw = e.target.value
-                const v = parseInt(raw, 10)
-                const safe = Number.isFinite(v) ? v : 1
-                setDraft((d) => ({ ...(d ?? {}), [piecesKey]: clampInt(safe, 1, 10) }))
+                if (!piecesKey) return;
+                const raw = e.target.value;
+                const v = parseInt(raw, 10);
+                const safe = Number.isFinite(v) ? v : 1;
+                setDraft((d) => ({ ...(d ?? {}), [piecesKey]: clampInt(safe, 1, 10) }));
               }}
               disabled={!piecesKey}
             />
@@ -569,8 +641,10 @@ function toggleTechnique(t: string) {
             <div className="text-sm font-medium">Power</div>
             <input
               className="border rounded px-3 py-2"
-              value={powerKey ? String(draft[powerKey] ?? '') : ''}
-              onChange={(e) => powerKey && setDraft((d) => ({ ...(d ?? {}), [powerKey]: e.target.value }))}
+              value={powerKey ? String((draft as AnyRecord)[powerKey] ?? "") : ""}
+              onChange={(e) =>
+                powerKey && setDraft((d) => ({ ...(d ?? {}), [powerKey]: e.target.value }))
+              }
               disabled={!powerKey}
               placeholder="e.g., MH"
             />
@@ -581,8 +655,10 @@ function toggleTechnique(t: string) {
             <div className="text-sm font-medium">Action</div>
             <input
               className="border rounded px-3 py-2"
-              value={actionKey ? String(draft[actionKey] ?? '') : ''}
-              onChange={(e) => actionKey && setDraft((d) => ({ ...(d ?? {}), [actionKey]: e.target.value }))}
+              value={actionKey ? String((draft as AnyRecord)[actionKey] ?? "") : ""}
+              onChange={(e) =>
+                actionKey && setDraft((d) => ({ ...(d ?? {}), [actionKey]: e.target.value }))
+              }
               disabled={!actionKey}
               placeholder="e.g., Fast"
             />
@@ -591,70 +667,63 @@ function toggleTechnique(t: string) {
         </div>
       </section>
 
+      <section className="border rounded p-4 space-y-3">
+        <h2 className="text-sm font-semibold text-gray-700">Rod Techniques</h2>
+
+        <div className="text-xs text-gray-600">
+          Primary: <span className="font-medium">{primaryTechnique || "none"}</span>
+          <span className="text-gray-500"> — click an active (non-primary) chip to make it primary</span>
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          {ROD_TECHNIQUES.map((t) => {
+            const active = techniques.includes(t);
+            const isPrimary = primaryTechnique === t;
+
+            // ✅ COLORS: selected = red, not selected = green (NO BLACK EVER)
+            // Primary is still tracked and shown above; we just don't use black styling.
+            const cls = active
+              ? "px-3 py-1 rounded border text-sm bg-red-600 text-white border-red-700"
+              : "px-3 py-1 rounded border text-sm bg-green-50 text-green-800 border-green-400";
+
+            return (
+              <button
+                key={t}
+                type="button"
+                onClick={() => toggleTechnique(t)}
+                className={cls}
+                aria-pressed={active}
+                disabled={saving}
+                title={
+                  active
+                    ? isPrimary
+                      ? "Primary (click to remove)"
+                      : "Selected (click to make primary)"
+                    : "Click to add"
+                }
+              >
+                {t}
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="text-xs text-gray-500">
+          Selected: {techniques.length ? techniques.join(", ") : "none"}
+        </div>
+      </section>
+
       <section className="border rounded p-4 space-y-4">
         <h2 className="text-sm font-semibold text-gray-700">Notes</h2>
 
         <label className="grid gap-1">
-
-      <section className="border rounded p-4 space-y-3">
-
-        <h2 className="text-sm font-semibold text-gray-700">Rod Techniques</h2>
-
-        <div className="text-xs text-gray-600">
-          Primary: {primaryTechnique || "none"} &nbsp;|&nbsp; Max: {MAX_TECHNIQUES}
-        </div>
-
-        <div className="flex flex-wrap gap-2">
-
-          {ROD_TECHNIQUES.map((t) => {
-
-            const active = techniques.includes(t)
-
-            const isPrimary = primaryTechnique === t
-            return (
-
-              <button
-
-                key={t}
-
-                type="button"
-
-                onClick={() => { toggleTechnique(t) }}
-
-                className={
-                  active ? "px-3 py-1 rounded border text-sm bg-red-600 text-white border-red-700" : "px-3 py-1 rounded border text-sm bg-green-50 text-green-800 border-green-400"
-                }
-                aria-pressed={active}
-
-                disabled={saving}
-
-              >
-
-                {t}
-
-              </button>
-
-            )
-
-          })}
-
-        </div>
-
-
-
-        <div className="text-xs text-gray-500">
-
-          Selected: {techniques.length ? techniques.join(", ") : "none"}
-
-        </div>
-
-      </section>
-
           <div className="text-sm font-medium">Notes</div>
           <textarea
             className="border rounded px-3 py-2 min-h-[90px]"
-            value={notesKey ? String(draft[notesKey] ?? '') : ''}
-            onChange={(e) => notesKey && setDraft((d) => ({ ...(d ?? {}), [notesKey]: e.target.value }))}
+            value={notesKey ? String((draft as AnyRecord)[notesKey] ?? "") : ""}
+            onChange={(e) =>
+              notesKey && setDraft((d) => ({ ...(d ?? {}), [notesKey]: e.target.value }))
+            }
             disabled={!notesKey}
           />
           {!notesKey && <div className="text-xs text-gray-500">Not saved (no notes column)</div>}
@@ -664,8 +733,10 @@ function toggleTechnique(t: string) {
           <div className="text-sm font-medium">Storage note</div>
           <input
             className="border rounded px-3 py-2"
-            value={storageKey ? String(draft[storageKey] ?? '') : ''}
-            onChange={(e) => storageKey && setDraft((d) => ({ ...(d ?? {}), [storageKey]: e.target.value }))}
+            value={storageKey ? String((draft as AnyRecord)[storageKey] ?? "") : ""}
+            onChange={(e) =>
+              storageKey && setDraft((d) => ({ ...(d ?? {}), [storageKey]: e.target.value }))
+            }
             disabled={!storageKey}
             placeholder="Where it lives (rack, locker, tube, etc.)"
           />
@@ -679,9 +750,9 @@ function toggleTechnique(t: string) {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {otherKeys.map((k) => {
-              const v = draft[k]
-              const isBool = typeof v === 'boolean'
-              const isNum = typeof v === 'number'
+              const v = (draft as AnyRecord)[k];
+              const isBool = typeof v === "boolean";
+              const isNum = typeof v === "number";
 
               return (
                 <label key={k} className="grid gap-1">
@@ -696,8 +767,8 @@ function toggleTechnique(t: string) {
                   ) : (
                     <input
                       className="border rounded px-3 py-2"
-                      type={isNum ? 'number' : 'text'}
-                      value={v == null ? '' : String(v)}
+                      type={isNum ? "number" : "text"}
+                      value={v == null ? "" : String(v)}
                       onChange={(e) =>
                         setDraft((d) => ({
                           ...(d ?? {}),
@@ -707,7 +778,7 @@ function toggleTechnique(t: string) {
                     />
                   )}
                 </label>
-              )
+              );
             })}
           </div>
         </section>
@@ -717,25 +788,5 @@ function toggleTechnique(t: string) {
         Save is enabled only when something changes. Updates write only changed columns that exist on this row.
       </div>
     </main>
-  )
+  );
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
