@@ -1,7 +1,7 @@
 "use client";
 function normalizeRodStatus(v: unknown): string {
   const s = String(v ?? "").trim().toLowerCase();
-  if (s === "owned") return "active";
+  if (s === "active") return "owned";
   return s;
 }
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -147,37 +147,25 @@ export default function RodDetailClient({ id, initial }: { id: string; initial?:
     });
   }
 
-  function toggleTechnique(name: string) {
-    const canon = name.trim();
-    if (!canon) return;
+function toggleTechnique(t: string) {
+  setError("");
+  setTechniques((prev) => {
+    const isOn = prev.includes(t);
 
-    setTechniques((cur) => {
-      const isOn = cur.includes(canon);
+    // always allow REMOVE
+    if (isOn) {
+      return prev.filter((x) => x !== t);
+    }
 
-      // removing
-      if (isOn) {
-        const next = cur.filter((x) => x !== canon);
-        // if we removed the primary, pick a new primary
-        if (canon === (cur[0] ?? "")) {
-          syncPrimaryFrom(next);
-        }
-        setValidationErr(null);
-        return next;
-      }
+    // only block ADD
+    if (prev.length >= MAX_TECHNIQUES) {
+      setError(`Max ${MAX_TECHNIQUES} techniques. Unselect one before adding another.`);
+      return prev;
+    }
 
-      // adding
-      if (cur.length >= MAX_TECHNIQUES) {
-        setValidationErr(`Max ${MAX_TECHNIQUES} techniques. Unselect one before adding another.`);
-        return cur;
-      }
-
-      setValidationErr(null);
-      const next = [...cur, canon];
-      // if this is the first technique, it becomes primary automatically
-      if (next.length === 1) syncPrimaryFrom(next);
-      return next;
-    });
-  }
+    return [...prev, t];
+  });
+}
 
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -631,16 +619,11 @@ export default function RodDetailClient({ id, initial }: { id: string; initial?:
 
                 type="button"
 
-                onClick={(e) => { if (active) { if (e.altKey || e.shiftKey) { toggleTechnique(t) } else { setPrimary(t) } } else { toggleTechnique(t) } }}
+                onClick={() => { toggleTechnique(t) }}
 
                 className={
-
-                  "px-3 py-1 rounded border text-sm " +
-
-                  (active ? (isPrimary ? "bg-black text-white border-black" : "bg-green-600 text-white border-green-700") : "bg-red-50 text-red-700 border-red-300")
-
+                  active ? "px-3 py-1 rounded border text-sm bg-red-600 text-white border-red-700" : "px-3 py-1 rounded border text-sm bg-green-50 text-green-800 border-green-400"
                 }
-
                 aria-pressed={active}
 
                 disabled={saving}
