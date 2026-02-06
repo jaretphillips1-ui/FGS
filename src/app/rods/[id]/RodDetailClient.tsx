@@ -637,7 +637,7 @@ export default function RodDetailClient({ id, initial }: { id: string; initial?:
 
                   "px-3 py-1 rounded border text-sm " +
 
-                  (isPrimary ? "bg-black text-white border-black" : active ? "bg-gray-100 text-black border-gray-400" : "bg-white text-black")
+                  (active ? (isPrimary ? "bg-black text-white border-black" : "bg-green-600 text-white border-green-700") : "bg-red-50 text-red-700 border-red-300")
 
                 }
 
@@ -736,6 +736,8 @@ export default function RodDetailClient({ id, initial }: { id: string; initial?:
     </main>
   )
 }
+
+
 
 
 
