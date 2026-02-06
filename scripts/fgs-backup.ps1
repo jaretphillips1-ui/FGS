@@ -21,7 +21,6 @@ function Get-FgsRepoRoot {
 
 $repo  = Get-FgsRepoRoot
 
-
 # --- FGS backup markers (for fgs-hard-truth.ps1) ---
 $__fgs_logs = Join-Path $repo "scripts\logs"
 New-Item -ItemType Directory -Force -Path $__fgs_logs | Out-Null
@@ -36,8 +35,8 @@ function New-FGSBackupMarker([Parameter(Mandatory)][ValidateSet("HEADER","MIRROR
 # FGS_BACKUP_HEADER
 $null = New-FGSBackupMarker -Kind HEADER
 
+# Canonical save root (ONE TRUE SAVE)
 $saves = "C:\Users\lsphi\OneDrive\AI_Workspace\_SAVES\FGS\LATEST"
-$desk  = "C:\Users\lsphi\Desktop\FGS"
 $stamp = Get-Date -Format "yyyyMMdd_HHmmss"
 
 Set-Location $repo
@@ -55,7 +54,8 @@ Commit: $(git rev-parse --short HEAD)
 Summary: Backup via scripts\fgs-backup.ps1
 Latest ZIP: $saves\FGS_LATEST.zip
 Stamped ZIP: $saves\FGS_LATEST_$stamp.zip
-Desktop ZIP: $desk\FGS_LATEST.zip
+Desktop ZIP (local): $env:USERPROFILE\Desktop\FGS_LATEST.zip
+Desktop ZIP (OneDrive): $env:USERPROFILE\OneDrive\Desktop\FGS_LATEST.zip
 "@
 
 $notePath   = Join-Path $saves "FGS_LATEST_CHECKPOINT.txt"
@@ -79,13 +79,10 @@ Compress-Archive -Path (Join-Path $tmp "*") -DestinationPath $stampedZip -Force
 
 Remove-Item $tmp -Recurse -Force
 
-Copy-Item -Path $latestZip -Destination (Join-Path $desk "FGS_LATEST.zip") -Force
-
 Write-Host "`n✅ Backup complete:"
 Write-Host "  $latestZip"
 Write-Host "  $stampedZip"
 Write-Host "  $notePath"
-Write-Host "  Desktop mirrored"
 
 # FGS_BACKUP_MIRROR
 $null = New-FGSBackupMarker -Kind MIRROR
@@ -93,16 +90,32 @@ $null = New-FGSBackupMarker -Kind MIRROR
 # FORCE MIRROR TO BOTH DESKTOPS
 # ============================
 try {
-  $saveZip = "C:\Users\lsphi\OneDrive\AI_Workspace\_SAVES\FGS\LATEST\FGS_LATEST.zip"
+  $saveZip = $latestZip
   if (Test-Path -LiteralPath $saveZip) {
-    $desktopLocal    = Join-Path $env:USERPROFILE "Desktop\FGS_LATEST.zip"
-    $desktopOneDrive = Join-Path $env:USERPROFILE "OneDrive\Desktop\FGS_LATEST.zip"
-# (disabled) local desktop mirror
-    Copy-Item -LiteralPath $saveZip -Destination $desktopOneDrive -Force
 
-    Write-Host "✅ Desktop mirrored (forced):" -ForegroundColor Green
-# (disabled) local desktop mirror path output
-    Write-Host "  $desktopOneDrive"
+    $desktopLocal    = Join-Path $env:USERPROFILE "Desktop"
+    $desktopOneDrive = Join-Path $env:USERPROFILE "OneDrive\Desktop"
+
+    $targets = @()
+
+    if (Test-Path -LiteralPath $desktopLocal) {
+      $targets += (Join-Path $desktopLocal "FGS_LATEST.zip")
+    }
+    if (Test-Path -LiteralPath $desktopOneDrive) {
+      $targets += (Join-Path $desktopOneDrive "FGS_LATEST.zip")
+    }
+
+    if (@($targets).Count -eq 0) {
+      Write-Warning "Desktop mirror skipped: no Desktop paths found."
+    } else {
+      foreach ($t in $targets) {
+        Copy-Item -LiteralPath $saveZip -Destination $t -Force
+      }
+
+      Write-Host "✅ Desktop mirrored (forced):" -ForegroundColor Green
+      foreach ($t in $targets) { Write-Host "  $t" }
+    }
+
   } else {
     Write-Warning "Canonical zip missing for mirror: $saveZip"
   }
@@ -111,35 +124,30 @@ try {
 }
 
 # ============================
-
-# ============================
-# FGS SCRIPT BACKUP GUARDRAIL
-# - Never leave scripts\*.bak_* inside the repo (clutter + accidental commits)
-# - Move any found backups to canonical: _SAVES\FGS\SCRIPT_BACKUPS
-# - Keep only newest 50 backup folders; delete anything older than 30 days
-
-
-# ============================
 # FGS RETENTION POLICY
 # - Keep FGS_LATEST.zip + CHECKPOINT.txt always
 # - Keep only the newest 20 timestamped zips (FGS_LATEST_*.zip)
 # ============================
 try {
-  $saveRoot = "C:\Users\lsphi\OneDrive\AI_Workspace\_SAVES\FGS\LATEST"
+  $saveRoot = $saves
   if (Test-Path -LiteralPath $saveRoot) {
 
     $keep = 20
 
-    # IMPORTANT: ALWAYS array (even when 0 or 1 file)
-    $timestamped = @(Get-ChildItem -LiteralPath $saveRoot -File -Filter "FGS_LATEST_*.zip" -ErrorAction SilentlyContinue |
+    # Force array no matter what (0/1/many)
+    [array]$timestamped = @(Get-ChildItem -LiteralPath $saveRoot -File -Filter "FGS_LATEST_*.zip" -ErrorAction SilentlyContinue |
       Sort-Object LastWriteTime -Descending)
 
-    if ($timestamped.Count -gt $keep) {
-      $toRemove = $timestamped | Select-Object -Skip $keep
-      Write-Host ("🧹 Retention: removing {0} old timestamped zips (keeping newest {1})..." -f $toRemove.Count, $keep) -ForegroundColor Yellow
+    $tsCount = @($timestamped).Count
+
+    if ($tsCount -gt $keep) {
+      [array]$toRemove = @($timestamped | Select-Object -Skip $keep)
+      $rmCount = @($toRemove).Count
+
+      Write-Host ("🧹 Retention: removing {0} old timestamped zips (keeping newest {1})..." -f $rmCount, $keep) -ForegroundColor Yellow
       foreach ($f in $toRemove) { Remove-Item -LiteralPath $f.FullName -Force }
     } else {
-      Write-Host ("🧹 Retention: ok (timestamped zips: {0}, keep: {1})" -f $timestamped.Count, $keep) -ForegroundColor Green
+      Write-Host ("🧹 Retention: ok (timestamped zips: {0}, keep: {1})" -f $tsCount, $keep) -ForegroundColor Green
     }
 
   } else {
@@ -148,7 +156,3 @@ try {
 } catch {
   Write-Warning ("Retention failed: " + $_.Exception.Message)
 }
-
-
-
-
