@@ -237,6 +237,15 @@ export default function RodsListClient<T extends RodRowLike>({
       return cmp(a.status ?? "", b.status ?? "");
     });
 
+  const ownedCount = React.useMemo(
+    () => filtered.filter((r) => isOwned(r.status)).length,
+    [filtered]
+  );
+  const plannedCount = React.useMemo(
+    () => filtered.filter((r) => isPlanned(r.status)).length,
+    [filtered]
+  );
+
   return (
     <div>
       <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center">
@@ -295,6 +304,10 @@ export default function RodsListClient<T extends RodRowLike>({
         <div className="text-sm opacity-70 sm:ml-auto">
           {filtered.length} / {(rows ?? []).length}
           {filtersOn ? <span className="ml-2">(filtered)</span> : null}
+          <span className="ml-2">•</span>
+          <span className="ml-2">Owned: {ownedCount}</span>
+          <span className="ml-2">•</span>
+          <span className="ml-2">Planned: {plannedCount}</span>
         </div>
       </div>
 
