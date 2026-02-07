@@ -67,10 +67,11 @@ function normalizeStatus(s: string | null | undefined): string {
   return (s ?? "").trim().toLowerCase();
 }
 
-function isActiveStatus(status: string | null | undefined): boolean {
-  // Keep this intentionally simple + predictable:
-  // Active-only means status must be exactly "active" (case-insensitive).
-  return normalizeStatus(status) === "active";
+function isOwnedLike(status: string | null | undefined): boolean {
+  // "Active only" in THIS app really means: show owned rods.
+  // Also accept legacy "active" from earlier builds.
+  const s = normalizeStatus(status);
+  return s === "owned" || s === "active";
 }
 
 function cmp(a: string, b: string): number {
@@ -91,13 +92,29 @@ export default function RodsListClient<T extends RodRowLike>({
   // URL -> initial state
   const initialQ = React.useMemo(() => getString(searchParams, "q"), [searchParams]);
   const initialTech = React.useMemo(() => getString(searchParams, "tech"), [searchParams]);
-  const initialSort = React.useMemo(() => (getString(searchParams, "sort") as SortKey) || "name", [searchParams]);
+  const initialSort = React.useMemo(
+    () => ((getString(searchParams, "sort") as SortKey) || "name"),
+    [searchParams]
+  );
   const initialActiveOnly = React.useMemo(() => getBool(searchParams, "active"), [searchParams]);
 
   const [q, setQ] = React.useState(initialQ);
   const [techFilter, setTechFilter] = React.useState<string>(initialTech);
   const [sortKey, setSortKey] = React.useState<SortKey>(initialSort);
   const [activeOnly, setActiveOnly] = React.useState<boolean>(initialActiveOnly);
+
+  const normalizedQ = q.trim().toLowerCase();
+  const filtersOn = normalizedQ.length > 0 || techFilter.length > 0 || activeOnly;
+
+  function clearAll() {
+    setQ("");
+    setTechFilter("");
+    setSortKey("name");
+    setActiveOnly(false);
+
+    // Immediately clear URL too (no debounce lag / no "sticky" feeling)
+    router.replace(pathname);
+  }
 
   // Keep state in sync for back/forward navigation
   React.useEffect(() => {
@@ -130,19 +147,9 @@ export default function RodsListClient<T extends RodRowLike>({
     return () => clearTimeout(t);
   }, [q, techFilter, sortKey, activeOnly, router, pathname, searchParams]);
 
-  const normalizedQ = q.trim().toLowerCase();
-
   const filtered = (rows ?? [])
     .filter((r) => {
-      const hay = [
-        r.name,
-        r.brand,
-        r.model,
-        r.power,
-        r.action,
-        r.line,
-        r.notes,
-      ]
+      const hay = [r.name, r.brand, r.model, r.power, r.action, r.line, r.notes]
         .filter(Boolean)
         .join(" ")
         .toLowerCase();
@@ -152,7 +159,7 @@ export default function RodsListClient<T extends RodRowLike>({
       const techniques = coerceTechniques(r.rod_techniques);
       const matchesTech = techFilter.length === 0 || techniques.includes(techFilter);
 
-      const matchesActive = !activeOnly || isActiveStatus(r.status);
+      const matchesActive = !activeOnly || isOwnedLike(r.status);
 
       return matchesText && matchesTech && matchesActive;
     })
@@ -196,36 +203,33 @@ export default function RodsListClient<T extends RodRowLike>({
           <option value="status">Sort: Status</option>
         </select>
 
-        <label className="flex items-center gap-2 text-sm select-none">
+        <label className="flex items-center gap-2 text-sm select-none" title="Show owned rods only">
           <input
             type="checkbox"
             checked={activeOnly}
             onChange={(e) => setActiveOnly(e.target.checked)}
           />
-          Active only
+          Owned only
         </label>
 
         <button
           type="button"
           className="rounded-md border px-3 py-2 text-sm"
-          onClick={() => {
-            setQ("");
-            setTechFilter("");
-            setSortKey("name");
-            setActiveOnly(false);
-          }}
+          onClick={clearAll}
+          title="Clear search + filters"
         >
           Clear
         </button>
 
         <div className="text-sm opacity-70 sm:ml-auto">
           {filtered.length} / {(rows ?? []).length}
+          {filtersOn ? <span className="ml-2">(filtered)</span> : null}
         </div>
       </div>
 
       {techFilter.length > 0 && (
         <div className="mb-4 flex items-center gap-2 text-sm">
-          <span className="opacity-70">Active technique:</span>
+          <span className="opacity-70">Technique:</span>
           <button
             type="button"
             className="text-xs px-2 py-0.5 rounded bg-gray-100 text-gray-700 border hover:bg-gray-200"
@@ -233,6 +237,15 @@ export default function RodsListClient<T extends RodRowLike>({
             title="Clear technique filter"
           >
             {techFilter} ✕
+          </button>
+        </div>
+      )}
+
+      {filtered.length === 0 && (rows ?? []).length > 0 && filtersOn && (
+        <div className="mb-4 text-sm text-gray-700">
+          No rods match these filters.{" "}
+          <button className="underline" type="button" onClick={clearAll}>
+            Clear filters
           </button>
         </div>
       )}

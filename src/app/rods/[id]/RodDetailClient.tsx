@@ -45,6 +45,7 @@ function extractTechniques(row: AnyRecord | null | undefined): string[] {
     row.techniques_json;
 
   if (Array.isArray(v)) return v.filter(Boolean).map(String);
+
   if (typeof v === "string") {
     const s = v.trim();
     if (!s) return [];
@@ -57,17 +58,12 @@ function extractTechniques(row: AnyRecord | null | undefined): string[] {
       .map((x) => x.trim())
       .filter(Boolean);
   }
+
   return [];
 }
 
 // Keys we never want to edit/save from the UI
-const READONLY_KEYS = new Set([
-  "id",
-  "created_at",
-  "updated_at",
-  "owner_id",
-  "gear_type",
-]);
+const READONLY_KEYS = new Set(["id", "created_at", "updated_at", "owner_id", "gear_type"]);
 
 // Keys we never want to show/edit in the generic editor section
 const HIDE_KEYS = new Set([
@@ -121,7 +117,7 @@ function formatFeetInches(totalInches: number | null) {
   if (totalInches == null || !Number.isFinite(totalInches)) {
     return { ft: 0, inch: 0, total: null as number | null };
   }
-  const t = clampInt(totalInches, 0, 2000);
+  const t = clampInt(totalInches, 0, 5000);
   const ft = Math.floor(t / 12);
   const inch = t % 12;
   return { ft, inch, total: t };
@@ -146,92 +142,17 @@ export default function RodDetailClient({
   const [original, setOriginal] = useState<AnyRecord | null>(null);
   const [draft, setDraft] = useState<AnyRecord | null>(null);
 
-  // Techniques
-  const [techniques, setTechniques] = useState<string[]>([]); // stored order: [primary, ...secondaries]
-  const [primaryTechnique, setPrimaryTechnique] = useState<string>("");
+  // Techniques: single source of truth.
+  // Stored order: [primary, ...secondaries]
+  const [techniques, setTechniques] = useState<string[]>([]);
 
-  function syncPrimaryFrom(list: string[]) {
-    setPrimaryTechnique(list[0] ?? "");
-  }
-
-  function setPrimary(name: string) {
-    const canon = String(name ?? "").trim();
-    if (!canon) return;
-
-    setValidationErr(null);
-
-    setTechniques((cur) => {
-      const curSet = cur.includes(canon) ? cur : [...cur, canon];
-      const rest = curSet.filter((x) => x !== canon);
-      const next = [canon, ...rest];
-      syncPrimaryFrom(next);
-      return next;
-    });
-  }
-
-  function toggleTechnique(t: string) {
-    const canon = String(t ?? "").trim();
-    if (!canon) return;
-
-    setValidationErr(null);
-
-    setTechniques((prev) => {
-      const isOn = prev.includes(canon);
-
-      // If already selected:
-      // - if NOT primary => make it primary (reorder) instead of removing
-      // - if IS primary => remove it (and promote next)
-      if (isOn) {
-        if (primaryTechnique && primaryTechnique !== canon) {
-          const rest = prev.filter((x) => x !== canon);
-          const next = [canon, ...rest];
-          syncPrimaryFrom(next);
-          return next;
-        }
-
-        const next = prev.filter((x) => x !== canon);
-        const nextPrimary = next[0] ?? "";
-        setPrimaryTechnique(nextPrimary);
-        return next;
-      }
-
-      // ADD
-      const next = [...prev, canon];
-      if (!primaryTechnique) setPrimaryTechnique(canon);
-      return next;
-    });
-  }
+  const primaryTechnique = techniques[0] ?? "";
 
   // Local-only length editor state (feet+inches) -> saved into total inches column
   const [lenFeet, setLenFeet] = useState(7);
   const [lenInches, setLenInches] = useState(0);
 
   const loadSeq = useRef(0);
-
-  // If the server already provided the row, seed state and skip the initial client fetch.
-  useEffect(() => {
-    if (!initial) return;
-
-    setOriginal(initial);
-    setDraft(initial);
-
-    const norm0 = normalizeTechniquesWithPrimary(extractTechniques(initial));
-    setTechniques(norm0.techniques);
-    setPrimaryTechnique(norm0.primary);
-
-    const lk = pickFirstExistingKey(initial, ["rod_length_in", "length_in"]);
-    if (lk) {
-      const total = Number((initial as AnyRecord)[lk] ?? 0);
-      if (Number.isFinite(total) && total >= 0) {
-        const feet = Math.floor(total / 12);
-        const inch = total % 12;
-        setLenFeet(feet);
-        setLenInches(inch);
-      }
-    }
-
-    setLoading(false);
-  }, [initial]);
 
   // Detect which columns exist on this row (schema-safe mapping)
   const lengthKey = useMemo(
@@ -266,7 +187,50 @@ export default function RodDetailClient({
       .sort();
   }, [original]);
 
+  function setTechniquesFromRow(row: AnyRecord) {
+    const norm = normalizeTechniquesWithPrimary(extractTechniques(row));
+    setTechniques(norm.techniques);
+  }
+
+  function setLengthFromRow(row: AnyRecord) {
+    const lk = pickFirstExistingKey(row, ["rod_length_in", "length_in"]);
+    if (!lk) return;
+    const { ft, inch } = formatFeetInches(Number(row[lk] ?? 0));
+    setLenFeet(ft);
+    setLenInches(inch);
+  }
+
+  function toggleTechnique(t: string) {
+    const canon = String(t ?? "").trim();
+    if (!canon) return;
+
+    setValidationErr(null);
+
+    setTechniques((prev) => {
+      const isOn = prev.includes(canon);
+      const curPrimary = prev[0] ?? "";
+
+      // If already selected:
+      // - if NOT primary => make it primary (reorder) instead of removing
+      // - if IS primary => remove it (and promote next)
+      if (isOn) {
+        if (curPrimary && curPrimary !== canon) {
+          const rest = prev.filter((x) => x !== canon);
+          return [canon, ...rest];
+        }
+        // remove primary
+        return prev.filter((x) => x !== canon);
+      }
+
+      // ADD (append; if no primary, this becomes primary implicitly by being first only if list was empty)
+      if (prev.length === 0) return [canon];
+      return [...prev, canon];
+    });
+  }
+
+  // Techniques dirty vs original row storage
   const techniquesDirty = useMemo(() => {
+    if (!original) return false;
     const a = buildTechniquesForStore(primaryTechnique, techniques);
     const b = normalizeTechniquesWithPrimary(extractTechniques(original)).techniques;
     return JSON.stringify(a) !== JSON.stringify(b);
@@ -284,23 +248,31 @@ export default function RodDetailClient({
     }
 
     if (lengthKey) {
-      const base = Number(original[lengthKey] ?? 0);
+      const base = clampInt(Number(original[lengthKey] ?? 0), 0, 5000);
       const curTotal =
-        clampInt(Number(lenFeet), 0, 12) * 12 + clampInt(Number(lenInches), 0, 11);
-      if (clampInt(base, 0, 2000) !== curTotal) return true;
+        clampInt(Number(lenFeet), 0, 20) * 12 + clampInt(Number(lenInches), 0, 11);
+      if (base !== curTotal) return true;
     }
 
     return false;
   }, [original, draft, editableKeys, lengthKey, lenFeet, lenInches]);
 
   useEffect(() => {
-    // Even if initial is provided, still fetch to hydrate rod_techniques + latest data.
     const seq = ++loadSeq.current;
     let cancelled = false;
 
     async function load() {
       setLoading(true);
       setErr(null);
+
+      // Seed immediately from initial (if provided) to reduce perceived latency,
+      // but still fetch fresh to guarantee latest data + techniques.
+      if (initial && !original) {
+        setOriginal(initial);
+        setDraft(initial);
+        setTechniquesFromRow(initial);
+        setLengthFromRow(initial);
+      }
 
       try {
         const sessionRes = await withTimeout(supabase.auth.getSession(), 6000, "auth.getSession()");
@@ -325,19 +297,9 @@ export default function RodDetailClient({
 
         if (!cancelled && seq === loadSeq.current) {
           setOriginal(row);
-
-          const norm1 = normalizeTechniquesWithPrimary(extractTechniques(row));
-          setTechniques(norm1.techniques);
-          setPrimaryTechnique(norm1.primary);
-
           setDraft(row);
-
-          const lk = pickFirstExistingKey(row, ["rod_length_in", "length_in"]);
-          if (lk) {
-            const { ft, inch } = formatFeetInches(Number(row[lk] ?? 0));
-            setLenFeet(ft);
-            setLenInches(inch);
-          }
+          setTechniquesFromRow(row);
+          setLengthFromRow(row);
         }
       } catch (e: unknown) {
         if (!cancelled && seq === loadSeq.current) {
@@ -352,7 +314,8 @@ export default function RodDetailClient({
     return () => {
       cancelled = true;
     };
-  }, [id, initial, router]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id, router]);
 
   async function deleteRod() {
     if (!original) return;
@@ -421,8 +384,8 @@ export default function RodDetailClient({
 
       if (lengthKey) {
         const curTotal =
-          clampInt(Number(lenFeet), 0, 12) * 12 + clampInt(Number(lenInches), 0, 11);
-        const base = clampInt(Number(original[lengthKey] ?? 0), 0, 2000);
+          clampInt(Number(lenFeet), 0, 20) * 12 + clampInt(Number(lenInches), 0, 11);
+        const base = clampInt(Number(original[lengthKey] ?? 0), 0, 5000);
         if (curTotal !== base) patch[lengthKey] = curTotal;
       }
 
@@ -445,13 +408,8 @@ export default function RodDetailClient({
 
       const next = { ...original, ...patch };
       setOriginal(next);
-
-      const norm2 = normalizeTechniquesWithPrimary(extractTechniques(next));
-      setTechniques(norm2.techniques);
-      setPrimaryTechnique(norm2.primary);
-
       setDraft(next);
-
+      setTechniquesFromRow(next);
       setSavedMsg("Saved.");
     } catch (e: unknown) {
       setErr((e as any)?.message ?? "Failed to save.");
@@ -464,7 +422,7 @@ export default function RodDetailClient({
   if (loading) return <main className="p-6">Loading…</main>;
   if (!draft || !original) return <main className="p-6">Not found.</main>;
 
-  const title = (String(draft.name ?? "").trim() || "Rod") as string;
+  const title = String(draft.name ?? "").trim() || "Rod";
 
   const renderedKeys = new Set<string>(
     [
@@ -494,6 +452,7 @@ export default function RodDetailClient({
           {(isDirty || techniquesDirty) && (
             <span className="text-sm text-amber-600">Unsaved changes</span>
           )}
+
           <button className="px-4 py-2 rounded border" onClick={() => router.push("/rods")}>
             Back
           </button>
@@ -586,12 +545,14 @@ export default function RodDetailClient({
               className="border rounded px-3 py-2"
               type="number"
               min={0}
-              max={12}
+              max={20}
               value={lenFeet}
               onChange={(e) => setLenFeet(Number(e.target.value))}
               disabled={!lengthKey}
             />
-            {!lengthKey && <div className="text-xs text-gray-500">Not saved (no length column)</div>}
+            {!lengthKey && (
+              <div className="text-xs text-gray-500">Not saved (no length column)</div>
+            )}
           </label>
 
           <label className="grid gap-1">
@@ -610,7 +571,7 @@ export default function RodDetailClient({
           <div className="grid gap-1">
             <div className="text-sm font-medium">Preview</div>
             <div className="border rounded px-3 py-2 text-sm text-gray-700">
-              {clampInt(Number(lenFeet), 0, 12)}&apos; {clampInt(Number(lenInches), 0, 11)}&quot;
+              {clampInt(Number(lenFeet), 0, 20)}&apos; {clampInt(Number(lenInches), 0, 11)}&quot;
               {lengthKey ? "" : <span className="text-gray-500"> — not saved</span>}
             </div>
           </div>
@@ -634,7 +595,9 @@ export default function RodDetailClient({
               }}
               disabled={!piecesKey}
             />
-            {!piecesKey && <div className="text-xs text-gray-500">Not saved (no pieces column)</div>}
+            {!piecesKey && (
+              <div className="text-xs text-gray-500">Not saved (no pieces column)</div>
+            )}
           </label>
 
           <label className="grid gap-1">
@@ -648,7 +611,9 @@ export default function RodDetailClient({
               disabled={!powerKey}
               placeholder="e.g., MH"
             />
-            {!powerKey && <div className="text-xs text-gray-500">Not saved (no power column)</div>}
+            {!powerKey && (
+              <div className="text-xs text-gray-500">Not saved (no power column)</div>
+            )}
           </label>
 
           <label className="grid gap-1">
@@ -662,7 +627,9 @@ export default function RodDetailClient({
               disabled={!actionKey}
               placeholder="e.g., Fast"
             />
-            {!actionKey && <div className="text-xs text-gray-500">Not saved (no action column)</div>}
+            {!actionKey && (
+              <div className="text-xs text-gray-500">Not saved (no action column)</div>
+            )}
           </label>
         </div>
       </section>
@@ -672,7 +639,11 @@ export default function RodDetailClient({
 
         <div className="text-xs text-gray-600">
           Primary: <span className="font-medium">{primaryTechnique || "none"}</span>
-          <span className="text-gray-500"> — click an active (non-primary) chip to make it primary</span>
+          <span className="text-gray-500">
+            {" "}
+            — click an active (non-primary) chip to make it primary; click the primary chip to
+            remove
+          </span>
         </div>
 
         <div className="flex flex-wrap gap-2">
@@ -680,11 +651,10 @@ export default function RodDetailClient({
             const active = techniques.includes(t);
             const isPrimary = primaryTechnique === t;
 
-            // ✅ COLORS: selected = red, not selected = green (NO BLACK EVER)
-            // Primary is still tracked and shown above; we just don't use black styling.
+            // Selected = GREEN, not selected = neutral/gray (no red)
             const cls = active
-              ? "px-3 py-1 rounded border text-sm bg-red-600 text-white border-red-700"
-              : "px-3 py-1 rounded border text-sm bg-green-50 text-green-800 border-green-400";
+              ? "px-3 py-1 rounded border text-sm bg-green-600 text-white border-green-700"
+              : "px-3 py-1 rounded border text-sm bg-gray-100 text-gray-800 border-gray-300 hover:bg-gray-200";
 
             return (
               <button
@@ -726,7 +696,9 @@ export default function RodDetailClient({
             }
             disabled={!notesKey}
           />
-          {!notesKey && <div className="text-xs text-gray-500">Not saved (no notes column)</div>}
+          {!notesKey && (
+            <div className="text-xs text-gray-500">Not saved (no notes column)</div>
+          )}
         </label>
 
         <label className="grid gap-1">
@@ -740,7 +712,9 @@ export default function RodDetailClient({
             disabled={!storageKey}
             placeholder="Where it lives (rack, locker, tube, etc.)"
           />
-          {!storageKey && <div className="text-xs text-gray-500">Not saved (no storage column)</div>}
+          {!storageKey && (
+            <div className="text-xs text-gray-500">Not saved (no storage column)</div>
+          )}
         </label>
       </section>
 
@@ -785,7 +759,8 @@ export default function RodDetailClient({
       )}
 
       <div className="text-xs text-gray-500">
-        Save is enabled only when something changes. Updates write only changed columns that exist on this row.
+        Save is enabled only when something changes. Updates write only changed columns that exist on
+        this row.
       </div>
     </main>
   );
