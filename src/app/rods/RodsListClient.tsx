@@ -18,6 +18,11 @@ export type RodRowLike = {
 };
 
 type SortKey = "name" | "brand" | "status";
+type StatusFilter = "all" | "owned" | "planned";
+
+// Your requested defaults:
+const DEFAULT_SORT: SortKey = "brand";
+const DEFAULT_STATUS: StatusFilter = "all";
 
 function coerceTechniques(input: unknown): string[] {
   if (input == null) return [];
@@ -43,39 +48,67 @@ function coerceTechniques(input: unknown): string[] {
   return [];
 }
 
-function setOrDeleteParam(params: URLSearchParams, key: string, value: string) {
-  const v = value.trim();
-  if (v.length === 0) params.delete(key);
-  else params.set(key, v);
+function normalizeStatus(s: string | null | undefined): string {
+  return (s ?? "").trim().toLowerCase();
 }
 
-function setOrDeleteFlag(params: URLSearchParams, key: string, on: boolean) {
-  if (!on) params.delete(key);
-  else params.set(key, "1");
+function isOwned(status: string | null | undefined): boolean {
+  const s = normalizeStatus(status);
+  return s === "owned" || s === "active"; // accept legacy "active"
+}
+
+function isPlanned(status: string | null | undefined): boolean {
+  const s = normalizeStatus(status);
+  return s === "planned";
+}
+
+function cmp(a: string, b: string): number {
+  return a.localeCompare(b, undefined, { sensitivity: "base" });
 }
 
 function getString(sp: ReturnType<typeof useSearchParams>, key: string): string {
   return sp.get(key) ?? "";
 }
 
-function getBool(sp: ReturnType<typeof useSearchParams>, key: string): boolean {
-  const v = sp.get(key);
-  return v === "1" || v === "true" || v === "yes";
+function normalizeSort(raw: string): SortKey {
+  const s = (raw ?? "").trim().toLowerCase();
+  if (s === "brand" || s === "status" || s === "name") return s;
+  return DEFAULT_SORT;
 }
 
-function normalizeStatus(s: string | null | undefined): string {
-  return (s ?? "").trim().toLowerCase();
+function normalizeStatusFilter(raw: string): StatusFilter {
+  const s = (raw ?? "").trim().toLowerCase();
+  if (s === "owned" || s === "planned" || s === "all") return s;
+  return DEFAULT_STATUS;
 }
 
-function isOwnedLike(status: string | null | undefined): boolean {
-  // "Active only" in THIS app really means: show owned rods.
-  // Also accept legacy "active" from earlier builds.
-  const s = normalizeStatus(status);
-  return s === "owned" || s === "active";
+/**
+ * Build a normalized querystring from state.
+ * - Omits defaults (keeps URLs clean)
+ * - Trims strings
+ * - Stable ordering
+ */
+function buildQueryString(state: {
+  q: string;
+  tech: string;
+  sort: SortKey;
+  status: StatusFilter;
+}): string {
+  const params = new URLSearchParams();
+
+  const q = state.q.trim();
+  const tech = state.tech.trim();
+
+  if (q) params.set("q", q);
+  if (tech) params.set("tech", tech);
+  if (state.sort !== DEFAULT_SORT) params.set("sort", state.sort);
+  if (state.status !== DEFAULT_STATUS) params.set("status", state.status);
+
+  return params.toString();
 }
 
-function cmp(a: string, b: string): number {
-  return a.localeCompare(b, undefined, { sensitivity: "base" });
+function canonicalUrl(pathname: string, qs: string): string {
+  return qs ? `${pathname}?${qs}` : pathname;
 }
 
 export default function RodsListClient<T extends RodRowLike>({
@@ -83,69 +116,98 @@ export default function RodsListClient<T extends RodRowLike>({
   children,
 }: {
   rows: T[];
-  children: (filteredRows: T[], setTechniqueFilter: React.Dispatch<React.SetStateAction<string>>) => React.ReactNode;
+  children: (
+    filteredRows: T[],
+    setTechniqueFilter: React.Dispatch<React.SetStateAction<string>>
+  ) => React.ReactNode;
 }) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
-  // URL -> initial state
-  const initialQ = React.useMemo(() => getString(searchParams, "q"), [searchParams]);
-  const initialTech = React.useMemo(() => getString(searchParams, "tech"), [searchParams]);
-  const initialSort = React.useMemo(
-    () => ((getString(searchParams, "sort") as SortKey) || "name"),
+  // --- URL -> state (supports back/forward) ---
+  const urlQ = React.useMemo(() => getString(searchParams, "q"), [searchParams]);
+  const urlTech = React.useMemo(() => getString(searchParams, "tech"), [searchParams]);
+  const urlSort = React.useMemo(
+    () => normalizeSort(getString(searchParams, "sort")),
     [searchParams]
   );
-  const initialActiveOnly = React.useMemo(() => getBool(searchParams, "active"), [searchParams]);
+  const urlStatus = React.useMemo(
+    () => normalizeStatusFilter(getString(searchParams, "status")),
+    [searchParams]
+  );
 
-  const [q, setQ] = React.useState(initialQ);
-  const [techFilter, setTechFilter] = React.useState<string>(initialTech);
-  const [sortKey, setSortKey] = React.useState<SortKey>(initialSort);
-  const [activeOnly, setActiveOnly] = React.useState<boolean>(initialActiveOnly);
+  const [q, setQ] = React.useState<string>(urlQ);
+  const [techFilter, setTechFilter] = React.useState<string>(urlTech);
+  const [sortKey, setSortKey] = React.useState<SortKey>(urlSort);
+  const [statusFilter, setStatusFilter] = React.useState<StatusFilter>(urlStatus);
+
+  // When URL changes (back/forward), sync state with guards.
+  React.useEffect(() => {
+    if (urlQ !== q) setQ(urlQ);
+    if (urlTech !== techFilter) setTechFilter(urlTech);
+    if (urlSort !== sortKey) setSortKey(urlSort);
+    if (urlStatus !== statusFilter) setStatusFilter(urlStatus);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [urlQ, urlTech, urlSort, urlStatus]);
 
   const normalizedQ = q.trim().toLowerCase();
-  const filtersOn = normalizedQ.length > 0 || techFilter.length > 0 || activeOnly;
+  const filtersOn =
+    normalizedQ.length > 0 ||
+    techFilter.trim().length > 0 ||
+    sortKey !== DEFAULT_SORT ||
+    statusFilter !== DEFAULT_STATUS;
+
+  // Prevent router.replace bouncing by tracking the last URL we wrote.
+  const lastWrittenUrlRef = React.useRef<string>("");
 
   function clearAll() {
     setQ("");
     setTechFilter("");
-    setSortKey("name");
-    setActiveOnly(false);
+    setSortKey(DEFAULT_SORT); // brand
+    setStatusFilter(DEFAULT_STATUS); // all
 
-    // Immediately clear URL too (no debounce lag / no "sticky" feeling)
-    router.replace(pathname);
+    const nextQs = buildQueryString({
+      q: "",
+      tech: "",
+      sort: DEFAULT_SORT,
+      status: DEFAULT_STATUS,
+    });
+    const next = canonicalUrl(pathname, nextQs); // should just be pathname
+    lastWrittenUrlRef.current = next;
+    router.replace(next);
   }
 
-  // Keep state in sync for back/forward navigation
-  React.useEffect(() => {
-    const urlQ = getString(searchParams, "q");
-    const urlTech = getString(searchParams, "tech");
-    const urlSort = (getString(searchParams, "sort") as SortKey) || "name";
-    const urlActive = getBool(searchParams, "active");
-
-    if (urlQ !== q) setQ(urlQ);
-    if (urlTech !== techFilter) setTechFilter(urlTech);
-    if (urlSort !== sortKey) setSortKey(urlSort);
-    if (urlActive !== activeOnly) setActiveOnly(urlActive);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams]);
-
-  // Write to URL (debounced for q)
+  // --- state -> URL (debounced for q) ---
   React.useEffect(() => {
     const t = setTimeout(() => {
-      const params = new URLSearchParams(searchParams.toString());
+      const nextQs = buildQueryString({
+        q,
+        tech: techFilter,
+        sort: sortKey,
+        status: statusFilter,
+      });
+      const nextUrl = canonicalUrl(pathname, nextQs);
 
-      setOrDeleteParam(params, "q", q);
-      setOrDeleteParam(params, "tech", techFilter);
-      setOrDeleteParam(params, "sort", sortKey);
-      setOrDeleteFlag(params, "active", activeOnly);
+      // Compute current URL from memoized URL values (stable).
+      const currentQs = buildQueryString({
+        q: urlQ,
+        tech: urlTech,
+        sort: urlSort,
+        status: urlStatus,
+      });
+      const currentUrl = canonicalUrl(pathname, currentQs);
 
-      const qs = params.toString();
-      router.replace(qs ? `${pathname}?${qs}` : pathname);
+      if (nextUrl === currentUrl) return;
+      if (lastWrittenUrlRef.current === nextUrl) return;
+
+      lastWrittenUrlRef.current = nextUrl;
+      router.replace(nextUrl);
     }, 250);
 
     return () => clearTimeout(t);
-  }, [q, techFilter, sortKey, activeOnly, router, pathname, searchParams]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [q, techFilter, sortKey, statusFilter, pathname, router, urlQ, urlTech, urlSort, urlStatus]);
 
   const filtered = (rows ?? [])
     .filter((r) => {
@@ -157,11 +219,17 @@ export default function RodsListClient<T extends RodRowLike>({
       const matchesText = normalizedQ.length === 0 || hay.includes(normalizedQ);
 
       const techniques = coerceTechniques(r.rod_techniques);
-      const matchesTech = techFilter.length === 0 || techniques.includes(techFilter);
+      const tf = techFilter.trim();
+      const matchesTech = tf.length === 0 || techniques.includes(tf);
 
-      const matchesActive = !activeOnly || isOwnedLike(r.status);
+      const matchesStatus =
+        statusFilter === "all"
+          ? true
+          : statusFilter === "owned"
+          ? isOwned(r.status)
+          : isPlanned(r.status);
 
-      return matchesText && matchesTech && matchesActive;
+      return matchesText && matchesTech && matchesStatus;
     })
     .sort((a, b) => {
       if (sortKey === "name") return cmp(a.name ?? "", b.name ?? "");
@@ -183,6 +251,7 @@ export default function RodsListClient<T extends RodRowLike>({
           className="w-full rounded-md border px-3 py-2 text-sm sm:w-64"
           value={techFilter}
           onChange={(e) => setTechFilter(e.target.value)}
+          title="Technique"
         >
           <option value="">All techniques</option>
           {ROD_TECHNIQUES.map((t) => (
@@ -198,25 +267,27 @@ export default function RodsListClient<T extends RodRowLike>({
           onChange={(e) => setSortKey(e.target.value as SortKey)}
           title="Sort"
         >
-          <option value="name">Sort: Name</option>
           <option value="brand">Sort: Brand</option>
+          <option value="name">Sort: Name</option>
           <option value="status">Sort: Status</option>
         </select>
 
-        <label className="flex items-center gap-2 text-sm select-none" title="Show owned rods only">
-          <input
-            type="checkbox"
-            checked={activeOnly}
-            onChange={(e) => setActiveOnly(e.target.checked)}
-          />
-          Owned only
-        </label>
+        <select
+          className="w-full rounded-md border px-3 py-2 text-sm sm:w-44"
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
+          title="Status"
+        >
+          <option value="all">All</option>
+          <option value="owned">Owned</option>
+          <option value="planned">Planned</option>
+        </select>
 
         <button
           type="button"
           className="rounded-md border px-3 py-2 text-sm"
           onClick={clearAll}
-          title="Clear search + filters"
+          title="Reset to defaults"
         >
           Clear
         </button>
@@ -227,7 +298,7 @@ export default function RodsListClient<T extends RodRowLike>({
         </div>
       </div>
 
-      {techFilter.length > 0 && (
+      {techFilter.trim().length > 0 && (
         <div className="mb-4 flex items-center gap-2 text-sm">
           <span className="opacity-70">Technique:</span>
           <button
@@ -245,7 +316,7 @@ export default function RodsListClient<T extends RodRowLike>({
         <div className="mb-4 text-sm text-gray-700">
           No rods match these filters.{" "}
           <button className="underline" type="button" onClick={clearAll}>
-            Clear filters
+            Reset filters
           </button>
         </div>
       )}
