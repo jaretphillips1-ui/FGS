@@ -159,13 +159,15 @@ export default function RodsListClient<T extends RodRowLike>({
   const [sortKey, setSortKey] = React.useState<SortKey>(urlSort);
   const [statusFilter, setStatusFilter] = React.useState<StatusFilter>(urlStatus);
 
-  // Keep state in sync with URL (back/forward support)
+  // ✅ IMPORTANT FIX:
+  // Only sync state when the URL values change (back/forward),
+  // not when local state changes (which would "snap back" and make selects feel unclickable).
   React.useEffect(() => {
-    if (urlQ !== q) setQ(urlQ);
-    if (urlTech !== techFilter) setTechFilter(urlTech);
-    if (urlSort !== sortKey) setSortKey(urlSort);
-    if (urlStatus !== statusFilter) setStatusFilter(urlStatus);
-  }, [urlQ, urlTech, urlSort, urlStatus, q, techFilter, sortKey, statusFilter]);
+    setQ((prev) => (prev === urlQ ? prev : urlQ));
+    setTechFilter((prev) => (prev === urlTech ? prev : urlTech));
+    setSortKey((prev) => (prev === urlSort ? prev : urlSort));
+    setStatusFilter((prev) => (prev === urlStatus ? prev : urlStatus));
+  }, [urlQ, urlTech, urlSort, urlStatus]);
 
   const normalizedQ = q.trim().toLowerCase();
   const filtersOn =

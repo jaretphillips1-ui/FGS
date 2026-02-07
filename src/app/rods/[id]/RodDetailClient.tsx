@@ -17,32 +17,40 @@ const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 // ======================
-// STATUS (Owned/Wishlist)
-// UI = owned | wishlist
-// DB = owned | wishlist   (legacy: "planned" treated as wishlist on read)
+// STATUS (Owned / Wish list)
+// UI:   owned | wishlist
+// DB:   owned | planned   (enum gear_status)
+// Read: planned -> wishlist (UI)
+// Write: wishlist -> planned (DB)
 // ======================
 type UiStatus = "owned" | "wishlist";
+type DbStatus = "owned" | "planned";
 
 function errMsg(e: unknown, fallback: string) {
   if (e instanceof Error) return e.message || fallback;
   if (typeof e === "string") return e || fallback;
-  return fallback;
+  try {
+    return JSON.stringify(e);
+  } catch {
+    return fallback;
+  }
 }
 
 function normalizeRodStatusDb(v: unknown): string {
   const s = String(v ?? "").trim().toLowerCase();
   if (s === "active") return "owned"; // legacy
-  if (s === "planned") return "wishlist"; // legacy
+  if (s === "planned") return "planned";
+  if (s === "wishlist" || s === "wish list") return "planned"; // legacy safety
   return s;
 }
 
 function dbToUiStatus(v: unknown): UiStatus {
   const s = normalizeRodStatusDb(v);
-  return s === "owned" ? "owned" : "wishlist";
+  return s === "owned" ? "owned" : "wishlist"; // planned -> wishlist UI
 }
 
-function uiToDbStatus(ui: UiStatus): "owned" | "wishlist" {
-  return ui === "owned" ? "owned" : "wishlist";
+function uiToDbStatus(ui: UiStatus): DbStatus {
+  return ui === "owned" ? "owned" : "planned";
 }
 
 function shouldIncludeKeyInPatch(key: string, value: unknown): boolean {
@@ -392,6 +400,14 @@ export default function RodDetailClient({
     }
 
     try {
+      // Re-check session before write
+      const sessionRes = await withTimeout(supabase.auth.getSession(), 6000, "auth.getSession()");
+      const user = sessionRes.data.session?.user;
+      if (!user) {
+        router.push("/login");
+        return;
+      }
+
       const patch: AnyRecord = {};
 
       if (String(original.name ?? "") !== trimmedName) patch.name = trimmedName;
@@ -403,6 +419,12 @@ export default function RodDetailClient({
         const after = draft[k];
         if (!shouldIncludeKeyInPatch(k, after)) continue;
         if (!deepEqual(before, after)) patch[k] = after;
+      }
+
+      // ✅ Critical: normalize status to DB enum owned|planned (never wishlist)
+      if ("status" in patch) {
+        const s = normalizeRodStatusDb(patch.status);
+        patch.status = s === "owned" ? "owned" : "planned";
       }
 
       if (lengthKey) {
@@ -423,7 +445,11 @@ export default function RodDetailClient({
       }
 
       const res = await withTimeout(
-        supabase.from(TABLE).update(patch).eq("id", id),
+        supabase
+          .from(TABLE)
+          .update(patch)
+          .eq("id", id)
+          .eq("owner_id", user.id),
         8000,
         "gear_items update"
       );
@@ -531,12 +557,12 @@ export default function RodDetailClient({
                   const ui = (e.target.value as UiStatus) || "wishlist";
                   setDraft((d) => ({
                     ...(d ?? {}),
-                    status: uiToDbStatus(ui),
+                    status: uiToDbStatus(ui), // writes planned for wishlist
                   }));
                 }}
               >
                 <option value="owned">Owned</option>
-                <option value="wishlist">Wishlist</option>
+                <option value="wishlist">Wish list</option>
               </select>
             </label>
           )}
