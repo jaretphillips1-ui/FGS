@@ -19,24 +19,30 @@ const UUID_RE =
 // ======================
 // STATUS (Owned/Wishlist)
 // UI = owned | wishlist
-// DB = owned | planned (wishlist stored as "planned" for now, no migration)
+// DB = owned | wishlist   (legacy: "planned" treated as wishlist on read)
 // ======================
 type UiStatus = "owned" | "wishlist";
 
+function errMsg(e: unknown, fallback: string) {
+  if (e instanceof Error) return e.message || fallback;
+  if (typeof e === "string") return e || fallback;
+  return fallback;
+}
+
 function normalizeRodStatusDb(v: unknown): string {
   const s = String(v ?? "").trim().toLowerCase();
-  if (s === "active") return "owned";
-  if (s === "wishlist") return "planned"; // tolerate any old experiments
+  if (s === "active") return "owned"; // legacy
+  if (s === "planned") return "wishlist"; // legacy
   return s;
 }
 
 function dbToUiStatus(v: unknown): UiStatus {
   const s = normalizeRodStatusDb(v);
-  return s === "owned" ? "owned" : "wishlist"; // anything else becomes wishlist
+  return s === "owned" ? "owned" : "wishlist";
 }
 
-function uiToDbStatus(ui: UiStatus): "owned" | "planned" {
-  return ui === "owned" ? "owned" : "planned";
+function uiToDbStatus(ui: UiStatus): "owned" | "wishlist" {
+  return ui === "owned" ? "owned" : "wishlist";
 }
 
 function shouldIncludeKeyInPatch(key: string, value: unknown): boolean {
@@ -67,9 +73,11 @@ function extractTechniques(row: AnyRecord | null | undefined): string[] {
     const s = v.trim();
     if (!s) return [];
     try {
-      const j = JSON.parse(s);
+      const j: unknown = JSON.parse(s);
       if (Array.isArray(j)) return j.filter(Boolean).map(String);
-    } catch {}
+    } catch {
+      // fall through
+    }
     return s
       .split(",")
       .map((x) => x.trim())
@@ -281,8 +289,7 @@ export default function RodDetailClient({
       setLoading(true);
       setErr(null);
 
-      // Seed immediately from initial (if provided) to reduce perceived latency,
-      // but still fetch fresh to guarantee latest data + techniques.
+      // Seed immediately from initial (if provided), but still fetch fresh.
       if (initial && !original) {
         setOriginal(initial);
         setDraft(initial);
@@ -319,7 +326,7 @@ export default function RodDetailClient({
         }
       } catch (e: unknown) {
         if (!cancelled && seq === loadSeq.current) {
-          setErr((e as any)?.message ?? "Failed to load rod.");
+          setErr(errMsg(e, "Failed to load rod."));
         }
       } finally {
         if (!cancelled && seq === loadSeq.current) setLoading(false);
@@ -363,7 +370,7 @@ export default function RodDetailClient({
       router.push("/rods");
       router.refresh();
     } catch (e: unknown) {
-      setErr((e as any)?.message ?? "Failed to delete.");
+      setErr(errMsg(e, "Failed to delete."));
     } finally {
       setSaving(false);
     }
@@ -428,7 +435,7 @@ export default function RodDetailClient({
       setTechniquesFromRow(next);
       setSavedMsg("Saved.");
     } catch (e: unknown) {
-      setErr((e as any)?.message ?? "Failed to save.");
+      setErr(errMsg(e, "Failed to save."));
     } finally {
       setSaving(false);
       setTimeout(() => setSavedMsg(null), 1500);
@@ -602,8 +609,7 @@ export default function RodDetailClient({
               value={piecesKey ? Number((draft as AnyRecord)[piecesKey] ?? 1) : 1}
               onChange={(e) => {
                 if (!piecesKey) return;
-                const raw = e.target.value;
-                const v = parseInt(raw, 10);
+                const v = parseInt(e.target.value, 10);
                 const safe = Number.isFinite(v) ? v : 1;
                 setDraft((d) => ({ ...(d ?? {}), [piecesKey]: clampInt(safe, 1, 10) }));
               }}
@@ -708,9 +714,7 @@ export default function RodDetailClient({
             }
             disabled={!notesKey}
           />
-          {!notesKey && (
-            <div className="text-xs text-gray-500">Not saved (no notes column)</div>
-          )}
+          {!notesKey && <div className="text-xs text-gray-500">Not saved (no notes column)</div>}
         </label>
 
         <label className="grid gap-1">

@@ -20,7 +20,7 @@ export type RodRowLike = {
 type SortKey = "name" | "brand" | "status";
 
 // URL filter values (keep stable even if UI labels change)
-type StatusFilter = "all" | "owned" | "planned";
+type StatusFilter = "all" | "owned" | "wishlist";
 
 // Your requested defaults:
 const DEFAULT_SORT: SortKey = "brand";
@@ -59,19 +59,19 @@ function isOwned(status: string | null | undefined): boolean {
   return s === "owned" || s === "active"; // accept legacy "active"
 }
 
-// "planned" becomes "wish list" in UI
+// Treat legacy "planned" as wishlist for compatibility
 function isWishList(status: string | null | undefined): boolean {
   const s = normalizeStatus(status);
-  return s === "planned" || s === "wishlist";
+  return s === "wishlist" || s === "planned";
 }
 
 /**
  * UI display status:
  * - owned/active -> "owned"
- * - planned/wishlist -> "wish list"
+ * - wishlist/planned -> "wish list"
  * - sold/retired/anything else -> "" (hide it)
  */
-function displayStatus(status: string | null | undefined): "" | "owned" | "wish list" {
+export function displayStatus(status: string | null | undefined): "" | "owned" | "wish list" {
   if (isOwned(status)) return "owned";
   if (isWishList(status)) return "wish list";
   return "";
@@ -91,11 +91,11 @@ function normalizeSort(raw: string): SortKey {
   return DEFAULT_SORT;
 }
 
-// Accept old "planned" and new "wishlist" in URL, normalize to "planned" internally for now
+// Accept old "planned" and normalize it to "wishlist"
 function normalizeStatusFilter(raw: string): StatusFilter {
   const s = (raw ?? "").trim().toLowerCase();
-  if (s === "owned" || s === "planned" || s === "all") return s as StatusFilter;
-  if (s === "wishlist") return "planned";
+  if (s === "all" || s === "owned" || s === "wishlist") return s as StatusFilter;
+  if (s === "planned") return "wishlist";
   return DEFAULT_STATUS;
 }
 
@@ -159,13 +159,13 @@ export default function RodsListClient<T extends RodRowLike>({
   const [sortKey, setSortKey] = React.useState<SortKey>(urlSort);
   const [statusFilter, setStatusFilter] = React.useState<StatusFilter>(urlStatus);
 
+  // Keep state in sync with URL (back/forward support)
   React.useEffect(() => {
     if (urlQ !== q) setQ(urlQ);
     if (urlTech !== techFilter) setTechFilter(urlTech);
     if (urlSort !== sortKey) setSortKey(urlSort);
     if (urlStatus !== statusFilter) setStatusFilter(urlStatus);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [urlQ, urlTech, urlSort, urlStatus]);
+  }, [urlQ, urlTech, urlSort, urlStatus, q, techFilter, sortKey, statusFilter]);
 
   const normalizedQ = q.trim().toLowerCase();
   const filtersOn =
@@ -193,6 +193,7 @@ export default function RodsListClient<T extends RodRowLike>({
     router.replace(next);
   }
 
+  // State -> URL (debounced)
   React.useEffect(() => {
     const t = setTimeout(() => {
       const nextQs = buildQueryString({
@@ -219,7 +220,6 @@ export default function RodsListClient<T extends RodRowLike>({
     }, 250);
 
     return () => clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [q, techFilter, sortKey, statusFilter, pathname, router, urlQ, urlTech, urlSort, urlStatus]);
 
   const filtered = (rows ?? [])
@@ -299,7 +299,7 @@ export default function RodsListClient<T extends RodRowLike>({
         >
           <option value="all">All</option>
           <option value="owned">Owned</option>
-          <option value="planned">Wish list</option>
+          <option value="wishlist">Wish list</option>
         </select>
 
         <button

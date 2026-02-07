@@ -3,8 +3,9 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import type { Session } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
-import RodsListClient from "./RodsListClient";
+import RodsListClient, { displayStatus } from "./RodsListClient";
 import { normalizeTechniques, sortTechniques } from "@/lib/rodTechniques";
 
 type RodRow = {
@@ -27,29 +28,25 @@ function hardTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
 }
 
 // Soft timeout: returns { timedOut: true } instead of throwing.
-// This prevents "timeout == signed out" false-positives.
 async function getSessionSoft(ms: number): Promise<{
   timedOut: boolean;
-  session: any | null;
+  session: Session | null;
   error?: string;
 }> {
   try {
     const res = await Promise.race([
       supabase.auth.getSession(),
-      new Promise<{ data: { session: any | null } }>((resolve) =>
+      new Promise<{ data: { session: Session | null } }>((resolve) =>
         setTimeout(() => resolve({ data: { session: null } }), ms)
       ),
     ]);
 
-    // If the timeout path fired, res is our synthetic object.
-    // We detect that by checking whether auth.getSession likely returned fast with data.session,
-    // but if it didn't, treat it as timed out.
-    // (This is intentionally conservative: "unknown" is safer than "signed out".)
-    const session = (res as any)?.data?.session ?? null;
-    const timedOut = session == null; // session-null could also be legit signed-out; we'll handle below carefully.
+    const session = res.data.session ?? null;
+    const timedOut = session == null;
     return { timedOut, session };
-  } catch (e: any) {
-    return { timedOut: false, session: null, error: e?.message ?? "Auth session error." };
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : "Auth session error.";
+    return { timedOut: false, session: null, error: msg };
   }
 }
 
@@ -62,29 +59,22 @@ export default function RodLockerPage() {
   const [rows, setRows] = useState<RodRow[]>([]);
   const [err, setErr] = useState<string | null>(null);
 
-  // First paint loading (only for initial load)
   const [initialLoading, setInitialLoading] = useState(true);
-  // Subsequent refresh indicator (keeps page visible)
   const [refreshing, setRefreshing] = useState(false);
 
-  // Prevent overlapping loads from leaving us stuck.
   const loadSeq = useRef(0);
 
-  async function load(opts?: { reason?: string }) {
+  async function load() {
     const seq = ++loadSeq.current;
 
-    // Only blank-screen on first load.
     if (initialLoading) setInitialLoading(true);
     else setRefreshing(true);
 
-    // Don’t clear user/rows immediately; keep UI stable while we refresh.
     setErr(null);
 
     try {
-      // Soft auth check first. If it takes too long, don't claim signed out.
       const sessionRes = await getSessionSoft(6000);
 
-      // If auth call errored, report but do not wipe state.
       if (sessionRes.error) {
         if (seq === loadSeq.current) {
           setAuthState("unknown");
@@ -96,8 +86,6 @@ export default function RodLockerPage() {
       const session = sessionRes.session;
       const user = session?.user ?? null;
 
-      // If we timed out AND we don't have a known user yet, treat as "unknown"
-      // (shows retry, not "you need to sign in").
       if (sessionRes.timedOut && !user && !userEmail) {
         if (seq === loadSeq.current) {
           setAuthState("unknown");
@@ -106,7 +94,6 @@ export default function RodLockerPage() {
         return;
       }
 
-      // If no user (and not in the "unknown" timeout case), treat as signed out.
       if (!user) {
         if (seq === loadSeq.current) {
           setAuthState("signed_out");
@@ -121,7 +108,6 @@ export default function RodLockerPage() {
         setUserEmail(user.email ?? null);
       }
 
-      // Load rods (hard timeout is fine here; it won't misrepresent auth status)
       const queryRes = await hardTimeout(
         supabase
           .from("gear_items")
@@ -132,19 +118,18 @@ export default function RodLockerPage() {
         "gear_items select"
       );
 
-      if ((queryRes as any).error) {
-        if (seq === loadSeq.current) setErr((queryRes as any).error.message);
+      if (queryRes.error) {
+        if (seq === loadSeq.current) setErr(queryRes.error.message);
         return;
       }
 
       if (seq === loadSeq.current) {
-        setRows(((queryRes as any).data ?? []) as RodRow[]);
+        setRows((queryRes.data ?? []) as RodRow[]);
       }
-    } catch (e: any) {
+    } catch (e: unknown) {
       if (seq === loadSeq.current) {
-        // Don’t automatically wipe userEmail unless we truly know they’re signed out.
         setAuthState(userEmail ? "signed_in" : "unknown");
-        setErr(e?.message ?? "Unknown error while loading rods.");
+        setErr(e instanceof Error ? e.message : "Unknown error while loading rods.");
       }
     } finally {
       if (seq === loadSeq.current) {
@@ -173,24 +158,23 @@ export default function RodLockerPage() {
     });
 
     if (error) setErr(error.message);
-    await load({ reason: "addTestRod" });
+    await load();
   }
 
   async function signOut() {
     await supabase.auth.signOut();
-    await load({ reason: "signOut" });
+    await load();
   }
 
   useEffect(() => {
-    load({ reason: "mount" });
-    const { data: sub } = supabase.auth.onAuthStateChange(() => load({ reason: "authChange" }));
+    load();
+    const { data: sub } = supabase.auth.onAuthStateChange(() => load());
     return () => sub.subscription.unsubscribe();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   if (initialLoading) return <main className="p-6">Loading…</main>;
 
-  // AUTH UNKNOWN (timeouts / slow auth): show a truthful state.
   if (authState === "unknown") {
     return (
       <main className="p-6">
@@ -203,7 +187,7 @@ export default function RodLockerPage() {
         </p>
 
         <div className="mt-6 flex gap-3 flex-wrap">
-          <button className="px-4 py-2 rounded border" onClick={() => load({ reason: "retryAuth" })}>
+          <button className="px-4 py-2 rounded border" onClick={() => load()}>
             Retry
           </button>
           <Link className="inline-block underline mt-2" href="/login">
@@ -214,7 +198,6 @@ export default function RodLockerPage() {
     );
   }
 
-  // SIGNED OUT
   if (authState === "signed_out" || !userEmail) {
     return (
       <main className="p-6">
@@ -228,7 +211,7 @@ export default function RodLockerPage() {
         </Link>
 
         <div className="mt-6">
-          <button className="px-4 py-2 rounded border" onClick={() => load({ reason: "retrySignedOut" })}>
+          <button className="px-4 py-2 rounded border" onClick={() => load()}>
             Retry
           </button>
         </div>
@@ -236,7 +219,6 @@ export default function RodLockerPage() {
     );
   }
 
-  // SIGNED IN
   return (
     <main className="p-6">
       <div className="flex items-center justify-between gap-4">
@@ -261,7 +243,7 @@ export default function RodLockerPage() {
           New Rod
         </button>
 
-        <button className="px-4 py-2 rounded border" onClick={() => load({ reason: "refreshBtn" })}>
+        <button className="px-4 py-2 rounded border" onClick={() => load()}>
           Refresh
         </button>
       </div>
@@ -281,16 +263,11 @@ export default function RodLockerPage() {
                   <div className="font-medium">{r.name}</div>
 
                   {(() => {
-                    const techs = normalizeTechniques(r.rod_techniques as any);
+                    const techs = normalizeTechniques(r.rod_techniques as unknown);
                     if (techs.length === 0) return null;
 
-                    // Primary is always the FIRST stored technique.
                     const primary = String(techs[0] ?? "").trim();
-
-                    // Secondary techniques: unique + sorted, excluding primary.
                     const secondarySorted = sortTechniques(techs).filter((t) => t !== primary);
-
-                    // Render order: [primary, ...secondary]
                     const display = primary ? [primary, ...secondarySorted] : secondarySorted;
 
                     if (display.length === 0) return null;
@@ -313,16 +290,6 @@ export default function RodLockerPage() {
                                 e.stopPropagation();
                                 setTechniqueFilter(t);
                               }}
-                              title={
-                                isPrimary
-                                  ? "Primary technique (click to filter)"
-                                  : "Secondary technique (click to filter)"
-                              }
-                              aria-label={
-                                isPrimary
-                                  ? `Primary technique: ${t}. Click to filter.`
-                                  : `Secondary technique: ${t}. Click to filter.`
-                              }
                             >
                               {t}
                             </button>
@@ -332,7 +299,9 @@ export default function RodLockerPage() {
                     );
                   })()}
 
-                  <div className="text-sm text-gray-600">{r.status}</div>
+                  {displayStatus(r.status) ? (
+                    <div className="text-sm text-gray-600">{displayStatus(r.status)}</div>
+                  ) : null}
                 </li>
               ))}
             </ul>

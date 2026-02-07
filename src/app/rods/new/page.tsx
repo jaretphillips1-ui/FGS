@@ -11,7 +11,7 @@ const TECHNIQUES = ROD_TECHNIQUES as readonly string[];
 const POWER_OPTIONS = ["—", "UL", "L", "ML", "M", "MH", "H", "XH"] as const;
 const ACTION_OPTIONS = ["—", "Slow", "Mod", "Mod-Fast", "Fast", "X-Fast"] as const;
 
-// New canonical statuses (we do NOT offer sold/retired/client anymore)
+// Canonical statuses
 const STATUS_OPTIONS = ["owned", "wishlist"] as const;
 type StatusOption = (typeof STATUS_OPTIONS)[number];
 
@@ -43,6 +43,16 @@ type FormState = {
   techniques: string[];
 };
 
+function errMsg(e: unknown): string {
+  if (e instanceof Error) return e.message || "Unknown error.";
+  if (typeof e === "string") return e || "Unknown error.";
+  try {
+    return JSON.stringify(e);
+  } catch {
+    return "Unknown error.";
+  }
+}
+
 function numOrNull(s: string): number | null {
   const t = s.trim();
   if (!t) return null;
@@ -62,8 +72,8 @@ function makeTotalInches(feetRaw: string, inchesRaw: string): number | null {
 
   if (f == null && i == null) return null;
 
-  const feet = Number.isFinite(f as unknown) ? (f as number) : 0;
-  const inches = Number.isFinite(i as unknown) ? (i as number) : 0;
+  const feet = Number.isFinite(f as number) ? (f as number) : 0;
+  const inches = Number.isFinite(i as number) ? (i as number) : 0;
 
   if (feet < 0 || inches < 0) return null;
 
@@ -75,8 +85,7 @@ function makeTotalInches(feetRaw: string, inchesRaw: string): number | null {
 }
 
 function statusLabel(s: StatusOption): string {
-  if (s === "owned") return "Owned";
-  return "Wish list";
+  return s === "owned" ? "Owned" : "Wish list";
 }
 
 export default function NewRodPage() {
@@ -226,14 +235,18 @@ export default function NewRodPage() {
         rod_guides_text: form.rod_guides_text.trim() || null,
       };
 
-      const { data, error } = await supabase.from("gear_items").insert(payload).select("id").maybeSingle();
+      const { data, error } = await supabase
+        .from("gear_items")
+        .insert(payload)
+        .select("id")
+        .maybeSingle();
 
       if (error) throw error;
       if (!data?.id) throw new Error("Insert succeeded but no id returned.");
 
       router.push(`/rods/${data.id}`);
-    } catch (e: any) {
-      setErr(e?.message ?? String(e));
+    } catch (e: unknown) {
+      setErr(errMsg(e));
     } finally {
       setSaving(false);
     }
@@ -470,7 +483,9 @@ export default function NewRodPage() {
                   className="border rounded px-3 py-2"
                   placeholder="Min"
                   value={form.rod_line_min_lb ?? ""}
-                  onChange={(e) => setForm((s) => ({ ...s, rod_line_min_lb: numOrNull(e.target.value) }))}
+                  onChange={(e) =>
+                    setForm((s) => ({ ...s, rod_line_min_lb: numOrNull(e.target.value) }))
+                  }
                 />
                 <input
                   type="number"
@@ -479,7 +494,9 @@ export default function NewRodPage() {
                   className="border rounded px-3 py-2"
                   placeholder="Max"
                   value={form.rod_line_max_lb ?? ""}
-                  onChange={(e) => setForm((s) => ({ ...s, rod_line_max_lb: numOrNull(e.target.value) }))}
+                  onChange={(e) =>
+                    setForm((s) => ({ ...s, rod_line_max_lb: numOrNull(e.target.value) }))
+                  }
                 />
               </div>
             </div>
@@ -494,7 +511,9 @@ export default function NewRodPage() {
                   className="border rounded px-3 py-2"
                   placeholder="Min"
                   value={form.rod_lure_min_oz ?? ""}
-                  onChange={(e) => setForm((s) => ({ ...s, rod_lure_min_oz: numOrNull(e.target.value) }))}
+                  onChange={(e) =>
+                    setForm((s) => ({ ...s, rod_lure_min_oz: numOrNull(e.target.value) }))
+                  }
                 />
                 <input
                   type="number"
@@ -503,7 +522,9 @@ export default function NewRodPage() {
                   className="border rounded px-3 py-2"
                   placeholder="Max"
                   value={form.rod_lure_max_oz ?? ""}
-                  onChange={(e) => setForm((s) => ({ ...s, rod_lure_max_oz: numOrNull(e.target.value) }))}
+                  onChange={(e) =>
+                    setForm((s) => ({ ...s, rod_lure_max_oz: numOrNull(e.target.value) }))
+                  }
                 />
               </div>
             </div>
