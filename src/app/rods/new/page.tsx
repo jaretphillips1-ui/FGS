@@ -5,15 +5,19 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 
-import { ROD_TECHNIQUES } from '@/lib/rodTechniques';
+import { ROD_TECHNIQUES } from "@/lib/rodTechniques";
+
 const TECHNIQUES = ROD_TECHNIQUES as readonly string[];
 const POWER_OPTIONS = ["—", "UL", "L", "ML", "M", "MH", "H", "XH"] as const;
 const ACTION_OPTIONS = ["—", "Slow", "Mod", "Mod-Fast", "Fast", "X-Fast"] as const;
-const STATUS_OPTIONS = ["owned", "planned", "sold", "retired"] as const;
+
+// New canonical statuses (we do NOT offer sold/retired/client anymore)
+const STATUS_OPTIONS = ["owned", "wishlist"] as const;
+type StatusOption = (typeof STATUS_OPTIONS)[number];
 
 type FormState = {
   name: string;
-  status: string;
+  status: StatusOption;
   saltwater_ok: boolean;
 
   notes: string;
@@ -68,6 +72,11 @@ function makeTotalInches(feetRaw: string, inchesRaw: string): number | null {
   const normInches = clampInchesToHalfSteps(inches - carry * 12);
 
   return normFeet * 12 + normInches;
+}
+
+function statusLabel(s: StatusOption): string {
+  if (s === "owned") return "Owned";
+  return "Wish list";
 }
 
 export default function NewRodPage() {
@@ -147,16 +156,17 @@ export default function NewRodPage() {
     setForm((s) => ({ ...s, rod_length_in: total }));
   }
 
-
   function toggleTechnique(name: string) {
     setForm((s) => {
-      const cur = Array.isArray(s.techniques) ? s.techniques : []
-      const next = cur.includes(name) ? cur.filter((x) => x !== name) : [...cur, name]
-      return { ...s, techniques: next }
-    })
+      const cur = Array.isArray(s.techniques) ? s.techniques : [];
+      const next = cur.includes(name) ? cur.filter((x) => x !== name) : [...cur, name];
+      return { ...s, techniques: next };
+    });
   }
+
   function validate(): string | null {
     if (!form.name.trim()) return "Name is required.";
+
     if (
       form.rod_line_min_lb != null &&
       form.rod_line_max_lb != null &&
@@ -193,7 +203,7 @@ export default function NewRodPage() {
         owner_id: user.id,
         gear_type: "rod",
         name: form.name.trim(),
-        status: form.status,
+        status: form.status, // "owned" | "wishlist"
         saltwater_ok: form.saltwater_ok,
 
         notes: form.notes.trim() || null,
@@ -216,17 +226,13 @@ export default function NewRodPage() {
         rod_guides_text: form.rod_guides_text.trim() || null,
       };
 
-      const { data, error } = await supabase
-        .from("gear_items")
-        .insert(payload)
-        .select("id")
-        .maybeSingle();
+      const { data, error } = await supabase.from("gear_items").insert(payload).select("id").maybeSingle();
 
       if (error) throw error;
       if (!data?.id) throw new Error("Insert succeeded but no id returned.");
 
       router.push(`/rods/${data.id}`);
-    } catch (e: unknown) {
+    } catch (e: any) {
       setErr(e?.message ?? String(e));
     } finally {
       setSaving(false);
@@ -253,10 +259,18 @@ export default function NewRodPage() {
         </Link>
 
         <div className="flex gap-2">
-          <button className="px-3 py-1 rounded border disabled:opacity-50" onClick={onCancel} disabled={saving}>
+          <button
+            className="px-3 py-1 rounded border disabled:opacity-50"
+            onClick={onCancel}
+            disabled={saving}
+          >
             Cancel
           </button>
-          <button className="px-3 py-1 rounded border disabled:opacity-50" onClick={onSave} disabled={saving}>
+          <button
+            className="px-3 py-1 rounded border disabled:opacity-50"
+            onClick={onSave}
+            disabled={saving}
+          >
             {saving ? "Saving…" : "Save"}
           </button>
         </div>
@@ -274,6 +288,7 @@ export default function NewRodPage() {
         </div>
       )}
 
+      {/* Basics */}
       <section className="rounded border p-4 space-y-4">
         <div className="grid gap-3">
           <label className="grid gap-1">
@@ -292,11 +307,11 @@ export default function NewRodPage() {
               <select
                 className="border rounded px-3 py-2"
                 value={form.status}
-                onChange={(e) => setForm((s) => ({ ...s, status: e.target.value }))}
+                onChange={(e) => setForm((s) => ({ ...s, status: e.target.value as StatusOption }))}
               >
                 {STATUS_OPTIONS.map((s) => (
                   <option key={s} value={s}>
-                    {s}
+                    {statusLabel(s)}
                   </option>
                 ))}
               </select>
@@ -334,13 +349,13 @@ export default function NewRodPage() {
         </div>
       </section>
 
-      <section className="rounded border p-4 space-y-4">
+      {/* Techniques */}
       <section className="rounded border p-4 space-y-3">
         <div className="text-sm font-medium">Rod Techniques</div>
 
         <div className="flex flex-wrap gap-2">
           {TECHNIQUES.map((t) => {
-            const active = form.techniques.includes(t)
+            const active = form.techniques.includes(t);
             return (
               <button
                 key={t}
@@ -354,7 +369,7 @@ export default function NewRodPage() {
               >
                 {t}
               </button>
-            )
+            );
           })}
         </div>
 
@@ -362,6 +377,9 @@ export default function NewRodPage() {
           Selected: {form.techniques.length ? form.techniques.join(", ") : "none"}
         </div>
       </section>
+
+      {/* Rod Specs */}
+      <section className="rounded border p-4 space-y-4">
         <div className="text-sm font-medium">Rod Specs</div>
 
         <div className="grid gap-3">
@@ -524,11 +542,6 @@ export default function NewRodPage() {
           </div>
         </div>
       </section>
-</main>
+    </main>
   );
 }
-
-
-
-
-

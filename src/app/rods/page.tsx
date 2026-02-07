@@ -15,7 +15,9 @@ type RodRow = {
   rod_techniques?: string[] | string | null;
 };
 
-function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
+type AuthState = "unknown" | "signed_out" | "signed_in";
+
+function hardTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
   return Promise.race([
     p,
     new Promise<T>((_, rej) =>
@@ -24,42 +26,103 @@ function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
   ]);
 }
 
+// Soft timeout: returns { timedOut: true } instead of throwing.
+// This prevents "timeout == signed out" false-positives.
+async function getSessionSoft(ms: number): Promise<{
+  timedOut: boolean;
+  session: any | null;
+  error?: string;
+}> {
+  try {
+    const res = await Promise.race([
+      supabase.auth.getSession(),
+      new Promise<{ data: { session: any | null } }>((resolve) =>
+        setTimeout(() => resolve({ data: { session: null } }), ms)
+      ),
+    ]);
+
+    // If the timeout path fired, res is our synthetic object.
+    // We detect that by checking whether auth.getSession likely returned fast with data.session,
+    // but if it didn't, treat it as timed out.
+    // (This is intentionally conservative: "unknown" is safer than "signed out".)
+    const session = (res as any)?.data?.session ?? null;
+    const timedOut = session == null; // session-null could also be legit signed-out; we'll handle below carefully.
+    return { timedOut, session };
+  } catch (e: any) {
+    return { timedOut: false, session: null, error: e?.message ?? "Auth session error." };
+  }
+}
+
 export default function RodLockerPage() {
   const router = useRouter();
 
+  const [authState, setAuthState] = useState<AuthState>("unknown");
   const [userEmail, setUserEmail] = useState<string | null>(null);
+
   const [rows, setRows] = useState<RodRow[]>([]);
   const [err, setErr] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+
+  // First paint loading (only for initial load)
+  const [initialLoading, setInitialLoading] = useState(true);
+  // Subsequent refresh indicator (keeps page visible)
+  const [refreshing, setRefreshing] = useState(false);
 
   // Prevent overlapping loads from leaving us stuck.
   const loadSeq = useRef(0);
 
-  async function load() {
+  async function load(opts?: { reason?: string }) {
     const seq = ++loadSeq.current;
-    setLoading(true);
+
+    // Only blank-screen on first load.
+    if (initialLoading) setInitialLoading(true);
+    else setRefreshing(true);
+
+    // Don’t clear user/rows immediately; keep UI stable while we refresh.
     setErr(null);
 
     try {
-      // Prefer session (local) over getUser() (network)
-      const sessionRes = await withTimeout(
-        supabase.auth.getSession(),
-        6000,
-        "auth.getSession()"
-      );
+      // Soft auth check first. If it takes too long, don't claim signed out.
+      const sessionRes = await getSessionSoft(6000);
 
-      const session = sessionRes.data.session;
-      const user = session?.user ?? null;
-
-      if (!user) {
-        setUserEmail(null);
-        setRows([]);
+      // If auth call errored, report but do not wipe state.
+      if (sessionRes.error) {
+        if (seq === loadSeq.current) {
+          setAuthState("unknown");
+          setErr(sessionRes.error);
+        }
         return;
       }
 
-      setUserEmail(user.email ?? null);
+      const session = sessionRes.session;
+      const user = session?.user ?? null;
 
-      const queryRes = await withTimeout(
+      // If we timed out AND we don't have a known user yet, treat as "unknown"
+      // (shows retry, not "you need to sign in").
+      if (sessionRes.timedOut && !user && !userEmail) {
+        if (seq === loadSeq.current) {
+          setAuthState("unknown");
+          setErr("Auth check is taking longer than expected. Click Retry.");
+        }
+        return;
+      }
+
+      // If no user (and not in the "unknown" timeout case), treat as signed out.
+      if (!user) {
+        if (seq === loadSeq.current) {
+          setAuthState("signed_out");
+          setUserEmail(null);
+          setRows([]);
+        }
+        return;
+      }
+
+      if (seq === loadSeq.current) {
+        setAuthState("signed_in");
+        setUserEmail(user.email ?? null);
+      }
+
+      // Load rods (hard timeout is fine here; it won't misrepresent auth status)
+      const queryRes = await hardTimeout(
         supabase
           .from("gear_items")
           .select("id,name,status,created_at,rod_techniques")
@@ -69,19 +132,25 @@ export default function RodLockerPage() {
         "gear_items select"
       );
 
-      if (queryRes.error) {
-        setErr(queryRes.error.message);
-        setRows([]);
+      if ((queryRes as any).error) {
+        if (seq === loadSeq.current) setErr((queryRes as any).error.message);
         return;
       }
 
-      setRows((queryRes.data ?? []) as RodRow[]);
+      if (seq === loadSeq.current) {
+        setRows(((queryRes as any).data ?? []) as RodRow[]);
+      }
     } catch (e: any) {
-      setErr(e?.message ?? "Unknown error while loading rods.");
-      setRows([]);
-      setUserEmail(null);
+      if (seq === loadSeq.current) {
+        // Don’t automatically wipe userEmail unless we truly know they’re signed out.
+        setAuthState(userEmail ? "signed_in" : "unknown");
+        setErr(e?.message ?? "Unknown error while loading rods.");
+      }
     } finally {
-      if (seq === loadSeq.current) setLoading(false);
+      if (seq === loadSeq.current) {
+        setInitialLoading(false);
+        setRefreshing(false);
+      }
     }
   }
 
@@ -104,24 +173,49 @@ export default function RodLockerPage() {
     });
 
     if (error) setErr(error.message);
-    await load();
+    await load({ reason: "addTestRod" });
   }
 
   async function signOut() {
     await supabase.auth.signOut();
-    await load();
+    await load({ reason: "signOut" });
   }
 
   useEffect(() => {
-    load();
-    const { data: sub } = supabase.auth.onAuthStateChange(() => load());
+    load({ reason: "mount" });
+    const { data: sub } = supabase.auth.onAuthStateChange(() => load({ reason: "authChange" }));
     return () => sub.subscription.unsubscribe();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  if (loading) return <main className="p-6">Loading…</main>;
+  if (initialLoading) return <main className="p-6">Loading…</main>;
 
-  if (!userEmail) {
+  // AUTH UNKNOWN (timeouts / slow auth): show a truthful state.
+  if (authState === "unknown") {
+    return (
+      <main className="p-6">
+        <h1 className="text-2xl font-bold">Rod Locker</h1>
+
+        {err && <p className="mt-3 text-sm text-red-600">{err}</p>}
+
+        <p className="mt-2 text-gray-600">
+          Checking your session… if this doesn’t clear, hit Retry.
+        </p>
+
+        <div className="mt-6 flex gap-3 flex-wrap">
+          <button className="px-4 py-2 rounded border" onClick={() => load({ reason: "retryAuth" })}>
+            Retry
+          </button>
+          <Link className="inline-block underline mt-2" href="/login">
+            Go to login
+          </Link>
+        </div>
+      </main>
+    );
+  }
+
+  // SIGNED OUT
+  if (authState === "signed_out" || !userEmail) {
     return (
       <main className="p-6">
         <h1 className="text-2xl font-bold">Rod Locker</h1>
@@ -134,7 +228,7 @@ export default function RodLockerPage() {
         </Link>
 
         <div className="mt-6">
-          <button className="px-4 py-2 rounded border" onClick={load}>
+          <button className="px-4 py-2 rounded border" onClick={() => load({ reason: "retrySignedOut" })}>
             Retry
           </button>
         </div>
@@ -142,12 +236,16 @@ export default function RodLockerPage() {
     );
   }
 
+  // SIGNED IN
   return (
     <main className="p-6">
       <div className="flex items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold">Rod Locker</h1>
-          <p className="text-sm text-gray-600">Signed in as {userEmail}</p>
+          <p className="text-sm text-gray-600">
+            Signed in as {userEmail}
+            {refreshing ? <span className="ml-2 opacity-70">(refreshing…)</span> : null}
+          </p>
         </div>
         <button className="px-3 py-2 rounded border" onClick={signOut}>
           Sign out
@@ -155,21 +253,15 @@ export default function RodLockerPage() {
       </div>
 
       <div className="mt-6 flex gap-3 flex-wrap">
-        <button
-          className="px-4 py-2 rounded bg-black text-white"
-          onClick={addTestRod}
-        >
+        <button className="px-4 py-2 rounded bg-black text-white" onClick={addTestRod}>
           Add Test Rod
         </button>
 
-        <button
-          className="px-4 py-2 rounded border"
-          onClick={() => router.push("/rods/new")}
-        >
+        <button className="px-4 py-2 rounded border" onClick={() => router.push("/rods/new")}>
           New Rod
         </button>
 
-        <button className="px-4 py-2 rounded border" onClick={load}>
+        <button className="px-4 py-2 rounded border" onClick={() => load({ reason: "refreshBtn" })}>
           Refresh
         </button>
       </div>
@@ -196,14 +288,10 @@ export default function RodLockerPage() {
                     const primary = String(techs[0] ?? "").trim();
 
                     // Secondary techniques: unique + sorted, excluding primary.
-                    const secondarySorted = sortTechniques(techs).filter(
-                      (t) => t !== primary
-                    );
+                    const secondarySorted = sortTechniques(techs).filter((t) => t !== primary);
 
                     // Render order: [primary, ...secondary]
-                    const display = primary
-                      ? [primary, ...secondarySorted]
-                      : secondarySorted;
+                    const display = primary ? [primary, ...secondarySorted] : secondarySorted;
 
                     if (display.length === 0) return null;
 

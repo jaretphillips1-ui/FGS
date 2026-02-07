@@ -18,6 +18,8 @@ export type RodRowLike = {
 };
 
 type SortKey = "name" | "brand" | "status";
+
+// URL filter values (keep stable even if UI labels change)
 type StatusFilter = "all" | "owned" | "planned";
 
 // Your requested defaults:
@@ -57,9 +59,22 @@ function isOwned(status: string | null | undefined): boolean {
   return s === "owned" || s === "active"; // accept legacy "active"
 }
 
-function isPlanned(status: string | null | undefined): boolean {
+// "planned" becomes "wish list" in UI
+function isWishList(status: string | null | undefined): boolean {
   const s = normalizeStatus(status);
-  return s === "planned";
+  return s === "planned" || s === "wishlist";
+}
+
+/**
+ * UI display status:
+ * - owned/active -> "owned"
+ * - planned/wishlist -> "wish list"
+ * - sold/retired/anything else -> "" (hide it)
+ */
+function displayStatus(status: string | null | undefined): "" | "owned" | "wish list" {
+  if (isOwned(status)) return "owned";
+  if (isWishList(status)) return "wish list";
+  return "";
 }
 
 function cmp(a: string, b: string): number {
@@ -76,9 +91,11 @@ function normalizeSort(raw: string): SortKey {
   return DEFAULT_SORT;
 }
 
+// Accept old "planned" and new "wishlist" in URL, normalize to "planned" internally for now
 function normalizeStatusFilter(raw: string): StatusFilter {
   const s = (raw ?? "").trim().toLowerCase();
-  if (s === "owned" || s === "planned" || s === "all") return s;
+  if (s === "owned" || s === "planned" || s === "all") return s as StatusFilter;
+  if (s === "wishlist") return "planned";
   return DEFAULT_STATUS;
 }
 
@@ -142,7 +159,6 @@ export default function RodsListClient<T extends RodRowLike>({
   const [sortKey, setSortKey] = React.useState<SortKey>(urlSort);
   const [statusFilter, setStatusFilter] = React.useState<StatusFilter>(urlStatus);
 
-  // When URL changes (back/forward), sync state with guards.
   React.useEffect(() => {
     if (urlQ !== q) setQ(urlQ);
     if (urlTech !== techFilter) setTechFilter(urlTech);
@@ -158,14 +174,13 @@ export default function RodsListClient<T extends RodRowLike>({
     sortKey !== DEFAULT_SORT ||
     statusFilter !== DEFAULT_STATUS;
 
-  // Prevent router.replace bouncing by tracking the last URL we wrote.
   const lastWrittenUrlRef = React.useRef<string>("");
 
   function clearAll() {
     setQ("");
     setTechFilter("");
-    setSortKey(DEFAULT_SORT); // brand
-    setStatusFilter(DEFAULT_STATUS); // all
+    setSortKey(DEFAULT_SORT);
+    setStatusFilter(DEFAULT_STATUS);
 
     const nextQs = buildQueryString({
       q: "",
@@ -173,12 +188,11 @@ export default function RodsListClient<T extends RodRowLike>({
       sort: DEFAULT_SORT,
       status: DEFAULT_STATUS,
     });
-    const next = canonicalUrl(pathname, nextQs); // should just be pathname
+    const next = canonicalUrl(pathname, nextQs);
     lastWrittenUrlRef.current = next;
     router.replace(next);
   }
 
-  // --- state -> URL (debounced for q) ---
   React.useEffect(() => {
     const t = setTimeout(() => {
       const nextQs = buildQueryString({
@@ -189,7 +203,6 @@ export default function RodsListClient<T extends RodRowLike>({
       });
       const nextUrl = canonicalUrl(pathname, nextQs);
 
-      // Compute current URL from memoized URL values (stable).
       const currentQs = buildQueryString({
         q: urlQ,
         tech: urlTech,
@@ -227,22 +240,19 @@ export default function RodsListClient<T extends RodRowLike>({
           ? true
           : statusFilter === "owned"
           ? isOwned(r.status)
-          : isPlanned(r.status);
+          : isWishList(r.status);
 
       return matchesText && matchesTech && matchesStatus;
     })
     .sort((a, b) => {
       if (sortKey === "name") return cmp(a.name ?? "", b.name ?? "");
       if (sortKey === "brand") return cmp(a.brand ?? "", b.brand ?? "");
-      return cmp(a.status ?? "", b.status ?? "");
+      return cmp(displayStatus(a.status), displayStatus(b.status));
     });
 
-  const ownedCount = React.useMemo(
-    () => filtered.filter((r) => isOwned(r.status)).length,
-    [filtered]
-  );
-  const plannedCount = React.useMemo(
-    () => filtered.filter((r) => isPlanned(r.status)).length,
+  const ownedCount = React.useMemo(() => filtered.filter((r) => isOwned(r.status)).length, [filtered]);
+  const wishListCount = React.useMemo(
+    () => filtered.filter((r) => isWishList(r.status)).length,
     [filtered]
   );
 
@@ -289,7 +299,7 @@ export default function RodsListClient<T extends RodRowLike>({
         >
           <option value="all">All</option>
           <option value="owned">Owned</option>
-          <option value="planned">Planned</option>
+          <option value="planned">Wish list</option>
         </select>
 
         <button
@@ -307,7 +317,7 @@ export default function RodsListClient<T extends RodRowLike>({
           <span className="ml-2">•</span>
           <span className="ml-2">Owned: {ownedCount}</span>
           <span className="ml-2">•</span>
-          <span className="ml-2">Planned: {plannedCount}</span>
+          <span className="ml-2">Wish list: {wishListCount}</span>
         </div>
       </div>
 

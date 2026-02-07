@@ -16,10 +16,27 @@ const TABLE = "gear_items";
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-function normalizeRodStatus(v: unknown): string {
+// ======================
+// STATUS (Owned/Wishlist)
+// UI = owned | wishlist
+// DB = owned | planned (wishlist stored as "planned" for now, no migration)
+// ======================
+type UiStatus = "owned" | "wishlist";
+
+function normalizeRodStatusDb(v: unknown): string {
   const s = String(v ?? "").trim().toLowerCase();
   if (s === "active") return "owned";
+  if (s === "wishlist") return "planned"; // tolerate any old experiments
   return s;
+}
+
+function dbToUiStatus(v: unknown): UiStatus {
+  const s = normalizeRodStatusDb(v);
+  return s === "owned" ? "owned" : "wishlist"; // anything else becomes wishlist
+}
+
+function uiToDbStatus(ui: UiStatus): "owned" | "planned" {
+  return ui === "owned" ? "owned" : "planned";
 }
 
 function shouldIncludeKeyInPatch(key: string, value: unknown): boolean {
@@ -145,7 +162,6 @@ export default function RodDetailClient({
   // Techniques: single source of truth.
   // Stored order: [primary, ...secondaries]
   const [techniques, setTechniques] = useState<string[]>([]);
-
   const primaryTechnique = techniques[0] ?? "";
 
   // Local-only length editor state (feet+inches) -> saved into total inches column
@@ -222,7 +238,7 @@ export default function RodDetailClient({
         return prev.filter((x) => x !== canon);
       }
 
-      // ADD (append; if no primary, this becomes primary implicitly by being first only if list was empty)
+      // ADD (append; if no primary, this becomes primary)
       if (prev.length === 0) return [canon];
       return [...prev, canon];
     });
@@ -503,19 +519,17 @@ export default function RodDetailClient({
               <div className="text-sm font-medium">Status</div>
               <select
                 className="border rounded px-3 py-2"
-                value={normalizeRodStatus((draft as AnyRecord).status)}
-                onChange={(e) =>
+                value={dbToUiStatus((draft as AnyRecord).status)}
+                onChange={(e) => {
+                  const ui = (e.target.value as UiStatus) || "wishlist";
                   setDraft((d) => ({
                     ...(d ?? {}),
-                    status: normalizeRodStatus(e.target.value),
-                  }))
-                }
+                    status: uiToDbStatus(ui),
+                  }));
+                }}
               >
-                <option value="">(unset)</option>
                 <option value="owned">Owned</option>
-                <option value="planned">Planned</option>
-                <option value="retired">Retired</option>
-                <option value="sold">Sold</option>
+                <option value="wishlist">Wishlist</option>
               </select>
             </label>
           )}
@@ -641,8 +655,7 @@ export default function RodDetailClient({
           Primary: <span className="font-medium">{primaryTechnique || "none"}</span>
           <span className="text-gray-500">
             {" "}
-            — click an active (non-primary) chip to make it primary; click the primary chip to
-            remove
+            — click an active (non-primary) chip to make it primary; click the primary chip to remove
           </span>
         </div>
 
@@ -651,7 +664,6 @@ export default function RodDetailClient({
             const active = techniques.includes(t);
             const isPrimary = primaryTechnique === t;
 
-            // Selected = GREEN, not selected = neutral/gray (no red)
             const cls = active
               ? "px-3 py-1 rounded border text-sm bg-green-600 text-white border-green-700"
               : "px-3 py-1 rounded border text-sm bg-gray-100 text-gray-800 border-gray-300 hover:bg-gray-200";
@@ -759,8 +771,7 @@ export default function RodDetailClient({
       )}
 
       <div className="text-xs text-gray-500">
-        Save is enabled only when something changes. Updates write only changed columns that exist on
-        this row.
+        Save is enabled only when something changes. Updates write only changed columns that exist on this row.
       </div>
     </main>
   );
