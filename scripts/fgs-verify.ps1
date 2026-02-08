@@ -11,6 +11,15 @@ if (!(Test-Path $repo)) { throw "Repo missing: $repo" }
 Set-Location $repo
 Write-Host "`n=== FGS VERIFY ===`nRepo: $repo`n"
 
+# 0) HARD POLICY: local Desktop mirror is NOT allowed
+$localMirror = Join-Path $env:USERPROFILE "Desktop\FGS"
+if (Test-Path $localMirror) {
+  Write-Bad "DRIFT: Local Desktop mirror exists (NOT allowed): $localMirror"
+  throw "DRIFT: Local Desktop mirror exists (remove it; only OneDrive Desktop mirror is allowed)."
+} else {
+  Write-Ok "No local Desktop mirror folder (good)."
+}
+
 # 1) Repo cleanliness
 $gs = (git status --porcelain)
 if ($gs) {
@@ -46,7 +55,7 @@ $node = Get-Process node -ErrorAction SilentlyContinue
 if ($node) { Write-Warn "node process(es) running. (May be unrelated, but worth noting.)" }
 else { Write-Ok "No node processes running." }
 
-# 4) ZIP integrity: canonical == desktop mirror
+# 4) ZIP integrity: canonical == OneDrive Desktop mirror
 $zipCanonical = "C:\Users\lsphi\OneDrive\AI_Workspace\_SAVES\FGS\LATEST\FGS_LATEST.zip"
 $zipDesktop   = "C:\Users\lsphi\OneDrive\Desktop\FGS\FGS_LATEST.zip"
 
