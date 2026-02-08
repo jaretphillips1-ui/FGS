@@ -82,9 +82,23 @@ else {
 
 # 5) Desktop shortcut wiring (GO + SAVE)
 $desktop = [Environment]::GetFolderPath('Desktop')
+
+# NOTE:
+# - GO must include -NoExit so the dev window stays open for log capture (professional-grade drift prevention).
+# - SAVE does not require -NoExit (it can exit when finished).
 $expected = @(
-  @{ Name="FGS GO.lnk"; Target="C:\Program Files\PowerShell\7\pwsh.exe"; MustContain="scripts\FGS-GO.ps1" },
-  @{ Name="FGS - SAVE + SHUTDOWN.lnk"; Target="C:\Program Files\PowerShell\7\pwsh.exe"; MustContain="FGS_SAVE_SHUTDOWN.ps1" }
+  @{
+    Name="FGS GO.lnk"
+    Target="C:\Program Files\PowerShell\7\pwsh.exe"
+    MustContain="scripts\FGS-GO.ps1"
+    RequireNoExit=$true
+  },
+  @{
+    Name="FGS - SAVE + SHUTDOWN.lnk"
+    Target="C:\Program Files\PowerShell\7\pwsh.exe"
+    MustContain="FGS_SAVE_SHUTDOWN.ps1"
+    RequireNoExit=$false
+  }
 )
 
 $wsh = New-Object -ComObject WScript.Shell
@@ -107,6 +121,15 @@ foreach ($e in $expected) {
     Write-Bad "$($e.Name): Arguments drifted."
     Write-Host "  Args: $args"
     throw "Shortcut drift detected: $($e.Name)"
+  }
+
+  if ($e.RequireNoExit) {
+    # Token-aware check: ensure -NoExit exists as an argument token (case-insensitive)
+    if ($args -notmatch '(?i)(^|\s)-NoExit(\s|$)') {
+      Write-Bad "$($e.Name): Missing -NoExit (required so logs don't vanish)."
+      Write-Host "  Args: $args"
+      throw "Shortcut drift detected: $($e.Name) missing -NoExit"
+    }
   }
 
   Write-Ok "$($e.Name): OK"
