@@ -40,6 +40,47 @@ function Invoke-Step {
   Write-Ok ("{0}: OK" -f $Name)
 }
 
+function Prune-SaveShutdownLogs {
+  param(
+    [Parameter(Mandatory)][string]$LogsDir,
+    [Parameter(Mandatory)][int]$Keep,
+    [Parameter(Mandatory)][string]$CurrentLogPath
+  )
+
+  try {
+    if (-not (Test-Path -LiteralPath $LogsDir)) { return }
+
+    $files = Get-ChildItem -LiteralPath $LogsDir -File -Filter "FGS_SAVE_SHUTDOWN_*.log" -ErrorAction SilentlyContinue
+    if (-not $files) { return }
+
+    # Newest first
+    $sorted = $files | Sort-Object LastWriteTime -Descending
+
+    # Skip newest $Keep; delete the rest, but never delete the current log
+    $toDelete = @()
+    $idx = 0
+    foreach ($f in $sorted) {
+      $idx++
+      if ($idx -le $Keep) { continue }
+      if ($f.FullName -eq $CurrentLogPath) { continue }
+      $toDelete += $f
+    }
+
+    foreach ($f in $toDelete) {
+      Remove-Item -LiteralPath $f.FullName -Force -ErrorAction SilentlyContinue
+    }
+
+    if ($toDelete.Count -gt 0) {
+      Write-Ok ("Log retention: pruned {0} old log(s); kept {1}." -f $toDelete.Count, $Keep)
+    } else {
+      Write-Ok ("Log retention: nothing to prune; kept {0}." -f $Keep)
+    }
+  } catch {
+    # Retention must never fail the main flow.
+    Write-Warn ("Log retention skipped (non-fatal): {0}" -f $_.Exception.Message)
+  }
+}
+
 $repo = Get-FgsRepoRoot
 Set-Location $repo
 
@@ -48,6 +89,9 @@ $logsDir = Join-Path $repo "scripts\logs"
 New-Item -ItemType Directory -Force -Path $logsDir | Out-Null
 $stamp = Get-Date -Format "yyyyMMdd_HHmmss"
 $logPath = Join-Path $logsDir ("FGS_SAVE_SHUTDOWN_{0}.log" -f $stamp)
+
+# Retention policy (keep N most recent shutdown logs)
+$KEEP_SAVE_SHUTDOWN_LOGS = 30
 
 Write-Host ("Log: {0}" -f $logPath)
 
@@ -251,4 +295,7 @@ catch {
 }
 finally {
   try { Stop-Transcript | Out-Null } catch { }
+
+  # Log retention (non-fatal)
+  Prune-SaveShutdownLogs -LogsDir $logsDir -Keep $KEEP_SAVE_SHUTDOWN_LOGS -CurrentLogPath $logPath | Out-Host
 }
