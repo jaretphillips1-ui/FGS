@@ -6,10 +6,16 @@ import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 
 import { ROD_TECHNIQUES } from "@/lib/rodTechniques";
+import {
+  ROD_POWER_OPTIONS,
+  ROD_ACTION_OPTIONS,
+  rodPowerLabel,
+  rodActionLabel,
+  optionToNullableValue,
+  valueToOption,
+} from "@/lib/rodPowerAction";
 
 const TECHNIQUES = ROD_TECHNIQUES as readonly string[];
-const POWER_OPTIONS = ["—", "UL", "L", "ML", "M", "MH", "H", "XH"] as const;
-const ACTION_OPTIONS = ["—", "Slow", "Mod", "Mod-Fast", "Fast", "X-Fast"] as const;
 
 // Canonical statuses
 const STATUS_OPTIONS = ["owned", "wishlist"] as const;
@@ -161,8 +167,8 @@ function buildRodName(form: FormState): string {
   const brand = form.brand.trim();
   const model = form.model.trim();
   const length = formatLengthFromTotalInches(form.rod_length_in);
-  const power = (form.rod_power ?? "").trim();
-  const action = (form.rod_action ?? "").trim();
+  const power = valueToOption(form.rod_power);
+  const action = valueToOption(form.rod_action);
 
   const parts: string[] = [];
 
@@ -284,8 +290,8 @@ export default function NewRodPage() {
       form.storage_note.trim() !== "" ||
       form.rod_length_in != null ||
       form.rod_pieces != null ||
-      (form.rod_power && form.rod_power !== "—") ||
-      (form.rod_action && form.rod_action !== "—") ||
+      valueToOption(form.rod_power) !== "—" ||
+      valueToOption(form.rod_action) !== "—" ||
       form.rod_line_min_lb != null ||
       form.rod_line_max_lb != null ||
       form.rod_lure_min_oz != null ||
@@ -384,8 +390,8 @@ export default function NewRodPage() {
         rod_length_in: form.rod_length_in,
 
         rod_pieces: form.rod_pieces,
-        rod_power: form.rod_power === "—" ? null : form.rod_power,
-        rod_action: form.rod_action === "—" ? null : form.rod_action,
+        rod_power: optionToNullableValue(form.rod_power),
+        rod_action: optionToNullableValue(form.rod_action),
 
         rod_line_min_lb: form.rod_line_min_lb,
         rod_line_max_lb: form.rod_line_max_lb,
@@ -580,7 +586,9 @@ export default function NewRodPage() {
           })}
         </div>
 
-        <div className="text-xs text-gray-500">Selected: {form.techniques.length ? form.techniques.join(", ") : "none"}</div>
+        <div className="text-xs text-gray-500">
+          Selected: {form.techniques.length ? form.techniques.join(", ") : "none"}
+        </div>
       </section>
 
       {/* Rod Specs */}
@@ -637,12 +645,12 @@ export default function NewRodPage() {
               <span className="text-sm text-gray-600">Power</span>
               <select
                 className="border rounded px-3 py-2"
-                value={form.rod_power}
+                value={valueToOption(form.rod_power)}
                 onChange={(e) => setForm((s) => ({ ...s, rod_power: e.target.value }))}
               >
-                {POWER_OPTIONS.map((p) => (
+                {ROD_POWER_OPTIONS.map((p) => (
                   <option key={p} value={p}>
-                    {p}
+                    {rodPowerLabel(p)}
                   </option>
                 ))}
               </select>
@@ -652,12 +660,12 @@ export default function NewRodPage() {
               <span className="text-sm text-gray-600">Action</span>
               <select
                 className="border rounded px-3 py-2"
-                value={form.rod_action}
+                value={valueToOption(form.rod_action)}
                 onChange={(e) => setForm((s) => ({ ...s, rod_action: e.target.value }))}
               >
-                {ACTION_OPTIONS.map((a) => (
+                {ROD_ACTION_OPTIONS.map((a) => (
                   <option key={a} value={a}>
-                    {a}
+                    {rodActionLabel(a)}
                   </option>
                 ))}
               </select>

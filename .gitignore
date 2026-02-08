@@ -84,3 +84,6 @@ scripts/*.rewritebak_*
 # FGS: ignore local script backups (avoid conflicting shutdown/save snippets)
 scripts/**/*.bak*
 scripts/*.bak*
+
+.patch_backups/
+

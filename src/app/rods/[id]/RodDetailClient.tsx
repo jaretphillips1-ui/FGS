@@ -9,9 +9,16 @@ import {
   normalizeTechniquesWithPrimary,
   buildTechniquesForStore,
 } from "@/lib/rodTechniques";
+import {
+  ROD_POWER_VALUES,
+  ROD_ACTION_VALUES,
+  rodPowerLabel,
+  rodActionLabel,
+  valueToOption,
+  optionToNullableValue,
+} from "@/lib/rodPowerAction";
 
 type AnyRecord = Record<string, unknown>;
-
 const TABLE = "gear_items";
 
 const UUID_RE =
@@ -42,10 +49,6 @@ const TECHNIQUE_KEYS = new Set([
   "rod_technique",
   "techniques_json",
 ]);
-
-// Match /rods/new
-const POWER_OPTIONS = ["—", "UL", "L", "ML", "M", "MH", "H", "XH"] as const;
-const ACTION_OPTIONS = ["—", "Slow", "Mod", "Mod-Fast", "Fast", "X-Fast"] as const;
 
 type LureOption = { label: string; value: number | null };
 const LURE_OZ_OPTIONS: readonly LureOption[] = [
@@ -80,7 +83,6 @@ const LURE_OZ_OPTIONS: readonly LureOption[] = [
 function lureValueToKey(v: number | null): string {
   return v == null ? "" : String(v);
 }
-
 function lureKeyToValue(k: string): number | null {
   if (!k) return null;
   const n = Number(k);
@@ -107,7 +109,7 @@ function normalizeRodStatusDb(v: unknown): string {
 
 function dbToUiStatus(v: unknown): UiStatus {
   const s = normalizeRodStatusDb(v);
-  return s === "owned" ? "owned" : "wishlist"; // planned -> wishlist UI
+  return s === "owned" ? "owned" : "wishlist";
 }
 
 function uiToDbStatus(ui: UiStatus): DbStatus {
@@ -171,6 +173,18 @@ const HIDE_KEYS = new Set([
   "rod_line_max_lb",
   "rod_lure_min_oz",
   "rod_lure_max_oz",
+  "rod_length_in",
+  "length_in",
+  "rod_pieces",
+  "pieces",
+  "rod_power",
+  "power",
+  "rod_action",
+  "action",
+  "rod_notes",
+  "notes",
+  "rod_storage_note",
+  "storage_note",
 ]);
 
 function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
@@ -379,6 +393,19 @@ export default function RodDetailClient({
   );
   const storageKey = useMemo(
     () => pickFirstExistingKey(original, ["rod_storage_note", "storage_note"]),
+    [original]
+  );
+
+  const techniqueStoreKey = useMemo(
+    () =>
+      pickFirstExistingKey(original, [
+        "rod_techniques",
+        "techniques",
+        "technique_list",
+        "technique",
+        "rod_technique",
+        "techniques_json",
+      ]) ?? "rod_techniques",
     [original]
   );
 
@@ -638,7 +665,7 @@ export default function RodDetailClient({
         if (!deepEqual(before, after)) patch[k] = after;
       }
 
-      // ✅ Critical: normalize status to DB enum owned|planned (never wishlist)
+      // Normalize status to DB enum owned|planned (never wishlist)
       if ("status" in patch) {
         const s = normalizeRodStatusDb(patch.status);
         patch.status = s === "owned" ? "owned" : "planned";
@@ -653,7 +680,7 @@ export default function RodDetailClient({
 
       // Persist techniques from the techniques UI (only when changed)
       if (techniquesDirty) {
-        patch.rod_techniques = buildTechniquesForStore(primaryTechnique, techniques);
+        patch[techniqueStoreKey] = buildTechniquesForStore(primaryTechnique, techniques);
       }
 
       if (Object.keys(patch).length === 0) {
@@ -702,10 +729,11 @@ export default function RodDetailClient({
       lineMaxKey ?? "",
       lureMinKey ?? "",
       lureMaxKey ?? "",
+      techniqueStoreKey ?? "",
+      "rod_techniques",
     ].filter(Boolean)
   );
 
-  // Only show keys that are not rendered in dedicated UI AND not hidden
   const otherKeys = editableKeys.filter((k) => !renderedKeys.has(k) && !HIDE_KEYS.has(k));
 
   const currentWaterType: WaterType = waterTypeKey
@@ -767,6 +795,7 @@ export default function RodDetailClient({
       )}
       {savedMsg && <div className="border rounded p-3 bg-green-50 text-green-800">{savedMsg}</div>}
 
+      {/* Basics */}
       <section className="border rounded p-4 space-y-4">
         <h2 className="text-sm font-semibold text-gray-700">Basics</h2>
 
@@ -790,7 +819,7 @@ export default function RodDetailClient({
                   const ui = (e.target.value as UiStatus) || "wishlist";
                   setDraft((d) => ({
                     ...(d ?? {}),
-                    status: uiToDbStatus(ui), // writes planned for wishlist
+                    status: uiToDbStatus(ui),
                   }));
                 }}
               >
@@ -813,7 +842,6 @@ export default function RodDetailClient({
                   if (waterTypeKey) {
                     cur[waterTypeKey] = next;
                   } else {
-                    // Fallback for older rows: map to boolean
                     cur.saltwater_ok = next === "salt";
                   }
 
@@ -829,279 +857,41 @@ export default function RodDetailClient({
             </select>
             {!waterTypeKey && (
               <div className="text-xs text-gray-500">
-                Stored as Saltwater OK (legacy). We can migrate to a proper water_type column later
-                if you want.
+                Stored as Saltwater OK (legacy). We can migrate to a proper water_type column later if you want.
               </div>
             )}
           </label>
         </div>
       </section>
 
-      <section className="border rounded p-4 space-y-4">
-        <h2 className="text-sm font-semibold text-gray-700">Rod Specs</h2>
-
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <label className="grid gap-1">
-            <div className="text-sm font-medium">Length (ft)</div>
-            <StepperNumber
-              value={lenFeet}
-              onChange={(v) => setLenFeet(v == null ? 0 : clampInt(v, 0, 20))}
-              min={0}
-              max={20}
-              step={1}
-              disabled={!lengthKey}
-              placeholder="0"
-            />
-            {!lengthKey && <div className="text-xs text-gray-500">Not saved (no length column)</div>}
-          </label>
-
-          <label className="grid gap-1">
-            <div className="text-sm font-medium">Length (in)</div>
-            <StepperNumber
-              value={lenInches}
-              onChange={(v) => setLenInches(v == null ? 0 : clampInt(v, 0, 11))}
-              min={0}
-              max={11}
-              step={1}
-              disabled={!lengthKey}
-              placeholder="0"
-            />
-          </label>
-
-          <div className="grid gap-1">
-            <div className="text-sm font-medium">Preview</div>
-            <div className="border rounded px-3 py-2 text-sm text-gray-700">
-              {clampInt(Number(lenFeet ?? 0), 0, 20)}&apos;{" "}
-              {clampInt(Number(lenInches ?? 0), 0, 11)}&quot;
-              {lengthKey ? "" : <span className="text-gray-500"> — not saved</span>}
-            </div>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <label className="grid gap-1">
-            <div className="text-sm font-medium">Pieces</div>
-            <StepperNumber
-              value={piecesKey ? (Number((draft as AnyRecord)[piecesKey] ?? 1) as number) : 1}
-              onChange={(v) => {
-                if (!piecesKey) return;
-                const safe = v == null ? 1 : clampInt(v, 1, 10);
-                setDraft((d) => ({ ...(d ?? {}), [piecesKey]: safe }));
-              }}
-              min={1}
-              max={10}
-              step={1}
-              disabled={!piecesKey}
-              placeholder="1"
-            />
-            {!piecesKey && <div className="text-xs text-gray-500">Not saved (no pieces column)</div>}
-          </label>
-
-          <label className="grid gap-1">
-            <div className="text-sm font-medium">Power</div>
-            <select
-              className="border rounded px-3 py-2"
-              value={currentPower}
-              onChange={(e) => {
-                if (!powerKey) return;
-                const v = String(e.target.value ?? "—");
-                setDraft((d) => ({
-                  ...(d ?? {}),
-                  [powerKey]: v === "—" ? null : v,
-                }));
-              }}
-              disabled={!powerKey}
-            >
-              {POWER_OPTIONS.map((p) => (
-                <option key={p} value={p}>
-                  {p}
-                </option>
-              ))}
-            </select>
-            {!powerKey && <div className="text-xs text-gray-500">Not saved (no power column)</div>}
-          </label>
-
-          <label className="grid gap-1">
-            <div className="text-sm font-medium">Action</div>
-            <select
-              className="border rounded px-3 py-2"
-              value={currentAction}
-              onChange={(e) => {
-                if (!actionKey) return;
-                const v = String(e.target.value ?? "—");
-                setDraft((d) => ({
-                  ...(d ?? {}),
-                  [actionKey]: v === "—" ? null : v,
-                }));
-              }}
-              disabled={!actionKey}
-            >
-              {ACTION_OPTIONS.map((a) => (
-                <option key={a} value={a}>
-                  {a}
-                </option>
-              ))}
-            </select>
-            {!actionKey && (
-              <div className="text-xs text-gray-500">Not saved (no action column)</div>
-            )}
-          </label>
-        </div>
-
-        {(lineMinKey || lineMaxKey || lureMinKey || lureMaxKey) && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {(lineMinKey || lineMaxKey) && (
-              <div className="grid gap-2">
-                <div className="text-sm font-medium">Line Rating (lb)</div>
-                <div className="grid grid-cols-2 gap-2">
-                  <label className="grid gap-1">
-                    <div className="text-xs text-gray-600">Min</div>
-                    <StepperNumber
-                      value={
-                        lineMinKey ? numOrNullFromDraft((draft as AnyRecord)[lineMinKey]) : null
-                      }
-                      onChange={(v) => {
-                        if (!lineMinKey) return;
-                        setMinMaxPair({
-                          minKey: lineMinKey,
-                          maxKey: lineMaxKey,
-                          changed: "min",
-                          value: v,
-                        });
-                      }}
-                      min={0}
-                      max={200}
-                      step={1}
-                      disabled={!lineMinKey}
-                      placeholder="Min"
-                    />
-                  </label>
-                  <label className="grid gap-1">
-                    <div className="text-xs text-gray-600">Max</div>
-                    <StepperNumber
-                      value={
-                        lineMaxKey ? numOrNullFromDraft((draft as AnyRecord)[lineMaxKey]) : null
-                      }
-                      onChange={(v) => {
-                        if (!lineMaxKey) return;
-                        setMinMaxPair({
-                          minKey: lineMinKey,
-                          maxKey: lineMaxKey,
-                          changed: "max",
-                          value: v,
-                        });
-                      }}
-                      min={0}
-                      max={200}
-                      step={1}
-                      disabled={!lineMaxKey}
-                      placeholder="Max"
-                    />
-                  </label>
-                </div>
-              </div>
-            )}
-
-            {(lureMinKey || lureMaxKey) && (
-              <div className="grid gap-2">
-                <div className="text-sm font-medium">Lure Rating (oz)</div>
-                <div className="grid grid-cols-2 gap-2">
-                  <label className="grid gap-1">
-                    <div className="text-xs text-gray-600">Min</div>
-                    <select
-                      className="border rounded px-3 py-2"
-                      value={lureValueToKey(
-                        lureMinKey ? numOrNullFromDraft((draft as AnyRecord)[lureMinKey]) : null
-                      )}
-                      onChange={(e) => {
-                        if (!lureMinKey) return;
-                        setMinMaxPair({
-                          minKey: lureMinKey,
-                          maxKey: lureMaxKey,
-                          changed: "min",
-                          value: lureKeyToValue(e.target.value),
-                        });
-                      }}
-                      disabled={!lureMinKey}
-                    >
-                      {LURE_OZ_OPTIONS.map((o) => (
-                        <option key={o.label} value={lureValueToKey(o.value)}>
-                          {o.label}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-
-                  <label className="grid gap-1">
-                    <div className="text-xs text-gray-600">Max</div>
-                    <select
-                      className="border rounded px-3 py-2"
-                      value={lureValueToKey(
-                        lureMaxKey ? numOrNullFromDraft((draft as AnyRecord)[lureMaxKey]) : null
-                      )}
-                      onChange={(e) => {
-                        if (!lureMaxKey) return;
-                        setMinMaxPair({
-                          minKey: lureMinKey,
-                          maxKey: lureMaxKey,
-                          changed: "max",
-                          value: lureKeyToValue(e.target.value),
-                        });
-                      }}
-                      disabled={!lureMaxKey}
-                    >
-                      {LURE_OZ_OPTIONS.map((o) => (
-                        <option key={o.label} value={lureValueToKey(o.value)}>
-                          {o.label}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-      </section>
-
+      {/* Techniques */}
       <section className="border rounded p-4 space-y-3">
-        <h2 className="text-sm font-semibold text-gray-700">Rod Techniques</h2>
-
-        <div className="text-xs text-gray-600">
-          Primary: <span className="font-medium">{primaryTechnique || "none"}</span>
-          <span className="text-gray-500">
-            {" "}
-            — click an active (non-primary) chip to make it primary; click the primary chip to
-            remove
-          </span>
+        <div className="flex items-baseline justify-between">
+          <h2 className="text-sm font-semibold text-gray-700">Rod Techniques</h2>
+          <div className="text-xs text-gray-500">
+            Primary: <span className="font-medium">{primaryTechnique || "—"}</span>
+          </div>
         </div>
 
         <div className="flex flex-wrap gap-2">
           {ROD_TECHNIQUES.map((t) => {
-            const active = techniques.includes(t);
+            const on = techniques.includes(t);
             const isPrimary = primaryTechnique === t;
-
-            const cls = isPrimary
-              ? "px-3 py-1 rounded border text-sm bg-green-600 text-white border-green-700"
-              : active
-              ? "px-3 py-1 rounded border text-sm bg-gray-700 text-white border-gray-800"
-              : "px-3 py-1 rounded border text-sm bg-gray-100 text-gray-800 border-gray-300 hover:bg-gray-200";
-
             return (
               <button
                 key={t}
                 type="button"
                 onClick={() => toggleTechnique(t)}
-                className={cls}
-                aria-pressed={active}
-                disabled={saving}
-                title={
-                  active
-                    ? isPrimary
-                      ? "Primary (click to remove)"
-                      : "Selected (click to make primary)"
-                    : "Click to add"
+                className={
+                  "px-3 py-1 rounded border text-sm " +
+                  (isPrimary
+                    ? "bg-black text-white border-black"
+                    : on
+                    ? "bg-gray-100 border-gray-300"
+                    : "bg-white")
                 }
+                title={on ? (isPrimary ? "Primary (click to remove)" : "Click to make primary") : "Click to add"}
+                aria-pressed={on}
               >
                 {t}
               </button>
@@ -1114,78 +904,280 @@ export default function RodDetailClient({
         </div>
       </section>
 
+      {/* Rod Specs */}
       <section className="border rounded p-4 space-y-4">
-        <h2 className="text-sm font-semibold text-gray-700">Notes</h2>
+        <h2 className="text-sm font-semibold text-gray-700">Rod Specs</h2>
 
-        <label className="grid gap-1">
-          <div className="text-sm font-medium">Notes</div>
-          <textarea
-            className="border rounded px-3 py-2 min-h-[90px]"
-            value={notesKey ? String((draft as AnyRecord)[notesKey] ?? "") : ""}
-            onChange={(e) => notesKey && setDraft((d) => ({ ...(d ?? {}), [notesKey]: e.target.value }))}
-            disabled={!notesKey}
-          />
-          {!notesKey && <div className="text-xs text-gray-500">Not saved (no notes column)</div>}
-        </label>
+        {/* Length + Pieces */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="grid gap-1 sm:col-span-2">
+            <div className="text-sm font-medium">Length</div>
+            <div className="grid grid-cols-2 gap-2">
+              <StepperNumber
+                value={lenFeet}
+                onChange={(v) => setLenFeet(v)}
+                min={0}
+                max={20}
+                step={1}
+                placeholder="ft"
+              />
+              <StepperNumber
+                value={lenInches}
+                onChange={(v) => setLenInches(v)}
+                min={0}
+                max={11}
+                step={1}
+                placeholder="in"
+              />
+            </div>
+            {!lengthKey && <div className="text-xs text-gray-500">Not saved (no length column)</div>}
+          </div>
 
-        <label className="grid gap-1">
-          <div className="text-sm font-medium">Storage note</div>
-          <input
-            className="border rounded px-3 py-2"
-            value={storageKey ? String((draft as AnyRecord)[storageKey] ?? "") : ""}
-            onChange={(e) =>
-              storageKey && setDraft((d) => ({ ...(d ?? {}), [storageKey]: e.target.value }))
-            }
-            disabled={!storageKey}
-            placeholder="Where it lives (rack, locker, tube, etc.)"
-          />
-          {!storageKey && <div className="text-xs text-gray-500">Not saved (no storage column)</div>}
-        </label>
+          <div className="grid gap-1">
+            <div className="text-sm font-medium">Pieces</div>
+            <StepperNumber
+              value={piecesKey ? (numOrNullFromDraft((draft as AnyRecord)[piecesKey]) ?? null) : null}
+              onChange={(v) => {
+                if (!piecesKey) return;
+                setDraft((d) => ({ ...(d ?? {}), [piecesKey]: v == null ? null : clampInt(v, 1, 8) }));
+              }}
+              min={1}
+              max={8}
+              step={1}
+              disabled={!piecesKey}
+              placeholder="1"
+            />
+            {!piecesKey && <div className="text-xs text-gray-500">Not saved (no pieces column)</div>}
+          </div>
+        </div>
+
+        {/* Power + Action */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <label className="grid gap-1">
+            <div className="text-sm font-medium">Power</div>
+            <select
+              className="border rounded px-3 py-2"
+              value={valueToOption(currentPower)}
+              onChange={(e) => {
+                if (!powerKey) return;
+                const opt = String(e.target.value ?? "—");
+                const v = optionToNullableValue(opt);
+                setDraft((d) => ({
+                  ...(d ?? {}),
+                  [powerKey]: v,
+                }));
+              }}
+              disabled={!powerKey}
+            >
+              <option value="—">—</option>
+              {ROD_POWER_VALUES.map((p) => (
+                <option key={p} value={p}>
+                  {rodPowerLabel(p)}
+                </option>
+              ))}
+            </select>
+            {!powerKey && <div className="text-xs text-gray-500">Not saved (no power column)</div>}
+          </label>
+
+          <label className="grid gap-1">
+            <div className="text-sm font-medium">Action</div>
+            <select
+              className="border rounded px-3 py-2"
+              value={valueToOption(currentAction)}
+              onChange={(e) => {
+                if (!actionKey) return;
+                const opt = String(e.target.value ?? "—");
+                const v = optionToNullableValue(opt);
+                setDraft((d) => ({
+                  ...(d ?? {}),
+                  [actionKey]: v,
+                }));
+              }}
+              disabled={!actionKey}
+            >
+              <option value="—">—</option>
+              {ROD_ACTION_VALUES.map((a) => (
+                <option key={a} value={a}>
+                  {rodActionLabel(a)}
+                </option>
+              ))}
+            </select>
+            {!actionKey && <div className="text-xs text-gray-500">Not saved (no action column)</div>}
+          </label>
+        </div>
+
+        {/* Line + Lure min/max */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="grid gap-2">
+            <div className="text-sm font-medium">Line rating (lb)</div>
+            <div className="grid grid-cols-2 gap-2">
+              <StepperNumber
+                value={lineMinKey ? numOrNullFromDraft((draft as AnyRecord)[lineMinKey]) : null}
+                onChange={(v) =>
+                  setMinMaxPair({ minKey: lineMinKey, maxKey: lineMaxKey, changed: "min", value: v })
+                }
+                min={0}
+                max={200}
+                step={1}
+                disabled={!lineMinKey && !lineMaxKey}
+                placeholder="Min"
+              />
+              <StepperNumber
+                value={lineMaxKey ? numOrNullFromDraft((draft as AnyRecord)[lineMaxKey]) : null}
+                onChange={(v) =>
+                  setMinMaxPair({ minKey: lineMinKey, maxKey: lineMaxKey, changed: "max", value: v })
+                }
+                min={0}
+                max={200}
+                step={1}
+                disabled={!lineMinKey && !lineMaxKey}
+                placeholder="Max"
+              />
+            </div>
+            {!lineMinKey && !lineMaxKey && (
+              <div className="text-xs text-gray-500">Not saved (no line rating columns)</div>
+            )}
+          </div>
+
+          <div className="grid gap-2">
+            <div className="text-sm font-medium">Lure rating (oz)</div>
+            <div className="grid grid-cols-2 gap-2">
+              <select
+                className="border rounded px-3 py-2"
+                value={lureValueToKey(lureMinKey ? ((draft as AnyRecord)[lureMinKey] as number | null) : null)}
+                onChange={(e) => {
+                  const v = lureKeyToValue(e.target.value);
+                  setMinMaxPair({ minKey: lureMinKey, maxKey: lureMaxKey, changed: "min", value: v });
+                }}
+                disabled={!lureMinKey && !lureMaxKey}
+              >
+                {LURE_OZ_OPTIONS.map((o) => (
+                  <option key={o.label} value={lureValueToKey(o.value)}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+
+              <select
+                className="border rounded px-3 py-2"
+                value={lureValueToKey(lureMaxKey ? ((draft as AnyRecord)[lureMaxKey] as number | null) : null)}
+                onChange={(e) => {
+                  const v = lureKeyToValue(e.target.value);
+                  setMinMaxPair({ minKey: lureMinKey, maxKey: lureMaxKey, changed: "max", value: v });
+                }}
+                disabled={!lureMinKey && !lureMaxKey}
+              >
+                {LURE_OZ_OPTIONS.map((o) => (
+                  <option key={o.label} value={lureValueToKey(o.value)}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            {!lureMinKey && !lureMaxKey && (
+              <div className="text-xs text-gray-500">Not saved (no lure rating columns)</div>
+            )}
+          </div>
+        </div>
+
+        {/* Notes + Storage */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <label className="grid gap-1">
+            <div className="text-sm font-medium">Notes</div>
+            <textarea
+              className="border rounded px-3 py-2 min-h-[120px]"
+              value={notesKey ? String((draft as AnyRecord)[notesKey] ?? "") : ""}
+              onChange={(e) => {
+                if (!notesKey) return;
+                setDraft((d) => ({ ...(d ?? {}), [notesKey]: e.target.value }));
+              }}
+              disabled={!notesKey}
+              placeholder={!notesKey ? "Not saved (no notes column)" : "Notes…"}
+            />
+          </label>
+
+          <label className="grid gap-1">
+            <div className="text-sm font-medium">Storage note</div>
+            <textarea
+              className="border rounded px-3 py-2 min-h-[120px]"
+              value={storageKey ? String((draft as AnyRecord)[storageKey] ?? "") : ""}
+              onChange={(e) => {
+                if (!storageKey) return;
+                setDraft((d) => ({ ...(d ?? {}), [storageKey]: e.target.value }));
+              }}
+              disabled={!storageKey}
+              placeholder={!storageKey ? "Not saved (no storage column)" : "Where it lives…"}
+            />
+          </label>
+        </div>
       </section>
 
+      {/* Other Fields */}
       {otherKeys.length > 0 && (
         <section className="border rounded p-4 space-y-3">
-          <h2 className="text-sm font-semibold text-gray-700">Other fields</h2>
+          <h2 className="text-sm font-semibold text-gray-700">Other Fields</h2>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="grid gap-3">
             {otherKeys.map((k) => {
               const v = (draft as AnyRecord)[k];
-              const isBool = typeof v === "boolean";
-              const isNum = typeof v === "number";
 
-              return (
-                <label key={k} className="grid gap-1">
-                  <div className="text-sm font-medium">{toTitle(k)}</div>
-
-                  {isBool ? (
+              // boolean
+              if (typeof v === "boolean") {
+                return (
+                  <label key={k} className="flex items-center justify-between gap-3">
+                    <div className="text-sm font-medium">{toTitle(k)}</div>
                     <input
                       type="checkbox"
                       checked={!!v}
-                      onChange={(e) => setDraft((d) => ({ ...(d ?? {}), [k]: e.target.checked }))}
-                    />
-                  ) : (
-                    <input
-                      className="border rounded px-3 py-2"
-                      type={isNum ? "number" : "text"}
-                      value={v == null ? "" : String(v)}
                       onChange={(e) =>
-                        setDraft((d) => ({
-                          ...(d ?? {}),
-                          [k]: isNum ? Number(e.target.value) : e.target.value,
-                        }))
+                        setDraft((d) => ({ ...(d ?? {}), [k]: e.target.checked }))
                       }
                     />
-                  )}
+                  </label>
+                );
+              }
+
+              // number-ish fields
+              if (typeof v === "number") {
+                return (
+                  <label key={k} className="grid gap-1">
+                    <div className="text-sm font-medium">{toTitle(k)}</div>
+                    <input
+                      className="border rounded px-3 py-2"
+                      value={String(v)}
+                      inputMode="decimal"
+                      onChange={(e) => {
+                        const n = Number(e.target.value);
+                        setDraft((d) => ({
+                          ...(d ?? {}),
+                          [k]: Number.isFinite(n) ? n : null,
+                        }));
+                      }}
+                    />
+                  </label>
+                );
+              }
+
+              // default string editor
+              return (
+                <label key={k} className="grid gap-1">
+                  <div className="text-sm font-medium">{toTitle(k)}</div>
+                  <input
+                    className="border rounded px-3 py-2"
+                    value={v == null ? "" : String(v)}
+                    onChange={(e) =>
+                      setDraft((d) => ({
+                        ...(d ?? {}),
+                        [k]: e.target.value,
+                      }))
+                    }
+                  />
                 </label>
               );
             })}
           </div>
         </section>
       )}
-
-      <div className="text-xs text-gray-500">
-        Save is enabled only when something changes. Updates write only changed columns that exist on this row.
-      </div>
     </main>
   );
 }
