@@ -14,12 +14,12 @@ if (Test-Path $lock) {
   "✅ Cleared .next\dev\lock"
 }
 
-# Start dev server
+# Start dev server (PowerShell 7) in a dedicated window
 "Starting dev server..."
-Start-Process -FilePath "powershell" -ArgumentList @(
+Start-Process -FilePath "pwsh" -ArgumentList @(
   "-NoExit",
   "-Command",
-  "Set-Location '$repo'; npm run dev"
+  "`$Host.UI.RawUI.WindowTitle='FGS SERVER'; Set-Location '$repo'; npm run dev"
 )
 
 # Open rods page after a short moment (browser handles the rest)
