@@ -57,12 +57,15 @@ function Write-StatusFiles {
     [Parameter(Mandatory)][string]$StatusDir,
     [Parameter(Mandatory)][ValidateSet("PASS","FAIL")][string]$Result,
     [Parameter(Mandatory)][string]$Repo,
-    [Parameter(Mandatory)][string]$Head,
+    [string]$Head = "",
     [Parameter(Mandatory)][string]$LogPath,
     [string]$Message = ""
   )
 
   Ensure-Dir $StatusDir
+
+  # Never allow breadcrumb writing to fail because HEAD is blank
+  if ([string]::IsNullOrWhiteSpace($Head)) { $Head = "(unknown)" }
 
   $ts = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
   $lastRun  = Join-Path $StatusDir "FGS_LAST_RUN.txt"
