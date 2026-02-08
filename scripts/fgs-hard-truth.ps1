@@ -17,14 +17,25 @@ function Get-FgsRepoRoot {
   return "$env:OneDrive\AI_Workspace\FGS\fgs-app"
 }
 
-$repo      = Get-FgsRepoRoot
-$desktop   = Join-Path $env:USERPROFILE "Desktop"
-$deskOD    = Join-Path $env:USERPROFILE "OneDrive\Desktop"
+function Get-OneDriveRoot {
+  $od = $env:OneDrive
+  if (-not [string]::IsNullOrWhiteSpace($od)) { return $od }
+  return (Join-Path $env:USERPROFILE "OneDrive")
+}
 
-$deskFGS   = Join-Path $desktop "FGS"
-$deskODFGS = Join-Path $deskOD  "FGS"
+$repo = Get-FgsRepoRoot
+$oneDriveRoot = Get-OneDriveRoot
 
-$savesRoot = "$env:OneDrive\AI_Workspace\_SAVES\FGS\LATEST"
+$desktopLocalRoot = Join-Path $env:USERPROFILE "Desktop"
+$desktopODRoot    = Join-Path $oneDriveRoot "Desktop"
+
+# POLICY:
+# - Local Desktop\FGS mirror folder is NOT ALLOWED (expected 0 files)
+# - OneDrive Desktop\FGS mirror folder IS REQUIRED (expected 2 files)
+$deskLocalFGS = Join-Path $desktopLocalRoot "FGS"
+$deskODFGS    = Join-Path $desktopODRoot    "FGS"
+
+$savesRoot = Join-Path $oneDriveRoot "AI_Workspace\_SAVES\FGS\LATEST"
 $canonZip  = Join-Path $savesRoot "FGS_LATEST.zip"
 $canonNote = Join-Path $savesRoot "FGS_LATEST_CHECKPOINT.txt"
 
@@ -33,11 +44,15 @@ function Get-GitClean {
     Set-Location $repo
     $s = (git status --porcelain) 2>$null
     return [string]::IsNullOrWhiteSpace($s)
-  } catch { return $false }
+  } catch {
+    return $false
+  }
 }
 
 # Desktop ROOT offenders (never allow these on either Desktop root)
-function Get-RootOffenders([Parameter(Mandatory)][string]$Root) {
+function Get-RootOffenders {
+  param([Parameter(Mandatory)][string]$Root)
+
   if (-not (Test-Path -LiteralPath $Root)) { return @() }
 
   @(
@@ -46,13 +61,15 @@ function Get-RootOffenders([Parameter(Mandatory)][string]$Root) {
   ) | Where-Object { $_ }
 }
 
-$offLocal = Get-RootOffenders -Root $desktop
-$offOD    = Get-RootOffenders -Root $deskOD
+$offLocal = Get-RootOffenders -Root $desktopLocalRoot
+$offOD    = Get-RootOffenders -Root $desktopODRoot
 
 $gitClean = if (Get-GitClean) { "CLEAN" } else { "DIRTY" }
 
-# Mirror file presence (per desktop folder)
-function Get-MirrorCount([Parameter(Mandatory)][string]$Folder) {
+# Mirror file presence (per Desktop\FGS folder)
+function Get-MirrorCount {
+  param([Parameter(Mandatory)][string]$Folder)
+
   $zip  = Join-Path $Folder "FGS_LATEST.zip"
   $note = Join-Path $Folder "FGS_LATEST_CHECKPOINT.txt"
   $n = 0
@@ -61,8 +78,8 @@ function Get-MirrorCount([Parameter(Mandatory)][string]$Folder) {
   return $n
 }
 
-$mirrorLocalCount = if (Test-Path -LiteralPath $deskFGS) { Get-MirrorCount -Folder $deskFGS } else { 0 }
-$mirrorODCount    = if (Test-Path -LiteralPath $deskODFGS) { Get-MirrorCount -Folder $deskODFGS } else { 0 }
+$mirrorLocalCount = if (Test-Path -LiteralPath $deskLocalFGS) { Get-MirrorCount -Folder $deskLocalFGS } else { 0 }
+$mirrorODCount    = if (Test-Path -LiteralPath $deskODFGS)    { Get-MirrorCount -Folder $deskODFGS }    else { 0 }
 
 # Backup markers (only look in scripts\logs to avoid expensive recurse)
 $markerHeader = 0
@@ -73,12 +90,14 @@ try {
     if (Get-ChildItem -LiteralPath $logs -File -Filter "FGS_BACKUP_HEADER_*.txt" -ErrorAction SilentlyContinue | Select-Object -First 1) { $markerHeader = 1 }
     if (Get-ChildItem -LiteralPath $logs -File -Filter "FGS_BACKUP_MIRROR_*.txt" -ErrorAction SilentlyContinue | Select-Object -First 1) { $markerMirror = 1 }
   }
-} catch {}
+} catch { }
 
-# Mirror ZIP quick-check (size+time) for both Desktop\FGS folders
-function Get-ZipOk([Parameter(Mandatory)][string]$MirrorFolder) {
+# Mirror ZIP quick-check (size+time)
+function Get-ZipQuickOk {
+  param([Parameter(Mandatory)][string]$MirrorFolder)
+
   $mirrorZip = Join-Path $MirrorFolder "FGS_LATEST.zip"
-  if (-not (Test-Path -LiteralPath $canonZip)) { return $false }
+  if (-not (Test-Path -LiteralPath $canonZip))  { return $false }
   if (-not (Test-Path -LiteralPath $mirrorZip)) { return $false }
 
   $c = Get-Item -LiteralPath $canonZip
@@ -86,8 +105,22 @@ function Get-ZipOk([Parameter(Mandatory)][string]$MirrorFolder) {
   return (($c.Length -eq $m.Length) -and ($c.LastWriteTime -eq $m.LastWriteTime))
 }
 
-$zipLocalOK = if (Test-Path -LiteralPath $deskFGS)   { Get-ZipOk -MirrorFolder $deskFGS }   else { $false }
-$zipODOK    = if (Test-Path -LiteralPath $deskODFGS) { Get-ZipOk -MirrorFolder $deskODFGS } else { $false }
+# Local Desktop\FGS is NOT ALLOWED. If it exists, we flag it explicitly.
+$zipLocalStatus =
+  if (Test-Path -LiteralPath $deskLocalFGS) {
+    "NOT ALLOWED"
+  } else {
+    "OK (none)"
+  }
+
+# OneDrive Desktop\FGS is REQUIRED. Quick-check should be OK.
+$zipODStatus =
+  if (Test-Path -LiteralPath $deskODFGS) {
+    if (Get-ZipQuickOk -MirrorFolder $deskODFGS) { "OK" } else { "DRIFT?" }
+  } else {
+    "MISSING"
+  }
 
 $ts = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-"[FGS HARD TRUTH FOOTER] $ts   Repo: $repo   Git: $gitClean   Desktop root offenders: local=$(@($offLocal).Count) od=$(@($offOD).Count) (both should be 0)   Desktop\FGS mirror files: local=$mirrorLocalCount od=$mirrorODCount (each should be 2)   Backup markers: header=$markerHeader mirror=$markerMirror (should be 1/1)   Mirror ZIP quick-check: local=$(if($zipLocalOK){'OK'}else{'DRIFT?'}) od=$(if($zipODOK){'OK'}else{'DRIFT?'}) (size+time)"
+
+"[FGS HARD TRUTH FOOTER] $ts   Repo: $repo   Git: $gitClean   Desktop root offenders: local=$(@($offLocal).Count) od=$(@($offOD).Count) (both should be 0)   Desktop\FGS mirror files: local=$mirrorLocalCount (should be 0) od=$mirrorODCount (should be 2)   Backup markers: header=$markerHeader mirror=$markerMirror (should be 1/1)   Mirror ZIP quick-check: local=$zipLocalStatus od=$zipODStatus (size+time)"
