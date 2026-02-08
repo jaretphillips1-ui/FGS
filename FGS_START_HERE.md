@@ -1,146 +1,94 @@
-\# FGS — START HERE (One True SOP)
+# FGS — START HERE (One True SOP)
 
+This file is the single source of truth for starting, resuming, saving,
+verifying, and shutting down the Fishing Gear System (FGS).
 
-
-This file is the single source of truth for starting, resuming, saving, and shutting down the Fishing Gear System (FGS).
-
-
-
-Repo root:
-
-C:\\Users\\lsphi\\OneDrive\\AI\_Workspace\\FGS\\fgs-app
-
-
-
-Canonical saves:
-
-C:\\Users\\lsphi\\OneDrive\\AI\_Workspace\\\_SAVES\\FGS\\LATEST
-
-
-
-Desktop mirror (ONLY mirror we use):
-
-C:\\Users\\lsphi\\OneDrive\\Desktop\\FGS\\FGS\_LATEST.zip
-
-
+If anything conflicts with this file, **this file wins**.
 
 ---
 
+## Canonical locations
 
+**Repo root**
+C:\Users\lsphi\OneDrive\AI_Workspace\FGS\fgs-app
 
-\## Resume FGS (every session)
+**ONE TRUE SAVE location**
+C:\Users\lsphi\OneDrive\AI_Workspace\_SAVES\FGS\LATEST
 
+**Desktop mirror (ONLY mirror allowed)**
+C:\Users\lsphi\OneDrive\Desktop\FGS
 
+Expected contents of Desktop\FGS:
+- FGS_LATEST.zip
+- FGS_LATEST_CHECKPOINT.txt
 
-Open a fresh PowerShell 7.5.4 window and run:
+No other Desktop mirrors are allowed.
 
+---
 
+## Resume FGS (every session)
 
-1\) Set-Location "$env:OneDrive\\AI\_Workspace\\FGS\\fgs-app"
+Open a **fresh PowerShell 7.5.4** window and run:
 
-2\) git status
+1) Set-Location "$env:OneDrive\AI_Workspace\FGS\fgs-app"
+2) git status
+3) git log -1 --oneline
 
-3\) git log -1 --oneline
+If:
+- working tree is clean
+- HEAD commit is expected
 
-
-
-If the working tree is clean and the latest commit is expected:
-
-\- Start the dev server using the Desktop shortcut: \*\*FGS GO\*\*
-
-
+➡ Start the dev server using the Desktop shortcut:
+**FGS GO**
 
 Notes:
-
-\- Keep the dev-server PowerShell window open while using the app.
-
-\- For edits / log capture while dev server runs, open a separate fresh PowerShell window.
-
-
+- Keep the dev-server PowerShell window open while using the app.
+- For edits or log capture while the dev server runs, open a **separate**
+  fresh PowerShell window.
+- Never paste terminal transcript text directly into PowerShell.
 
 ---
 
+## Save FGS / “Save FGS here” (canonical trigger)
 
+Any phrasing like:
+- “save FGS”
+- “save here”
+- “lock this in”
 
-\## Save FGS / Save FGS here (canonical procedure trigger)
-
-
-
-Any phrasing like “save FGS” means: run the ONE TRUE Save + Verify + Shutdown flow.
-
-
+means: **run the ONE TRUE Save + Verify + Shutdown flow**.
 
 Use the Desktop shortcut:
+**FGS - SAVE + SHUTDOWN**
 
-\- \*\*FGS - SAVE + SHUTDOWN\*\*
+This flow will:
+- Refuse to run if the repo is dirty (unless explicitly forced)
+- Create/update canonical ZIP(s) under `_SAVES\FGS\LATEST`
+- Mirror the latest ZIP + checkpoint to `OneDrive\Desktop\FGS`
+- Enforce retention policy on old timestamped ZIPs
+- Stop the dev server cleanly
+- Clear any Next.js dev lock
+- Perform final drift verification
 
-
-
-This should:
-
-\- Verify repo status (clean)
-
-\- Create/update canonical ZIP(s) under \_SAVES\\FGS\\LATEST
-
-\- Mirror the latest ZIP to OneDrive Desktop\\FGS
-
-\- Stop the dev server cleanly (no Next.js lock)
-
-
+If this step fails:
+- Do not continue working
+- Fix the reported issue first
 
 ---
 
+## Drift protection (professional-grade)
 
+FGS has **four layers of drift protection**:
 
-\## What we DO NOT do
+### 1) Manual (human)
+- This file (FGS_START_HERE.md)
+- You following the Resume / Save procedures
 
+### 2) Local scripted
+- scripts\fgs-verify.ps1
+- scripts\fgs-save-shutdown.ps1
+- scripts\fgs-backup.ps1
 
-
-\- Do not keep two different Desktop mirrors.
-
-\- Do not use a second “resume” shortcut if it’s redundant.
-
-\- Do not rely on random Desktop notes. This file replaces them.
-
-
-
----
-
-
-
-\## Quick sanity checks
-
-
-
-Repo status:
-
-\- git status
-
-
-
-Latest commit:
-
-\- git log -1 --oneline
-
-
-
-If dev server won’t start:
-
-\- ensure no prior node instance is running
-
-\- remove any Next.js dev lock file if present under .next\\dev\\ (only if needed)
-
-
-
----
-
-
-
-\## UI rule
-
-
-
-Rod length entry/display is always in feet + inches (not inches-only).
-
-
-
+You can manually run:
+```powershell
+.\scripts\fgs-verify.ps1
