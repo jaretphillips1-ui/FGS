@@ -1,19 +1,33 @@
+[CmdletBinding()]
+param(
+  [switch]$Plain
+)
+
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-function Write-Ok($msg)   { Write-Host "✅ $msg" -ForegroundColor Green }
-function Write-Warn($msg) { Write-Host "⚠️  $msg" -ForegroundColor Yellow }
-function Write-Bad($msg)  { Write-Host "❌ $msg" -ForegroundColor Red }
+function Write-Ok([string]$msg) {
+  if ($Plain) { Write-Output "OK  : $msg"; return }
+  Write-Host "✅ $msg" -ForegroundColor Green
+}
+function Write-Warn([string]$msg) {
+  if ($Plain) { Write-Output "WARN: $msg"; return }
+  Write-Host "⚠️  $msg" -ForegroundColor Yellow
+}
+function Write-Bad([string]$msg) {
+  if ($Plain) { Write-Output "BAD : $msg"; return }
+  Write-Host "❌ $msg" -ForegroundColor Red
+}
 
 $repo = "C:\Users\lsphi\OneDrive\AI_Workspace\FGS\fgs-app"
-if (!(Test-Path $repo)) { throw "Repo missing: $repo" }
+if (-not (Test-Path -LiteralPath $repo)) { throw "Repo missing: $repo" }
 
 Set-Location $repo
 Write-Host "`n=== FGS VERIFY ===`nRepo: $repo`n"
 
 # 0) HARD POLICY: local Desktop mirror is NOT allowed
 $localMirror = Join-Path $env:USERPROFILE "Desktop\FGS"
-if (Test-Path $localMirror) {
+if (Test-Path -LiteralPath $localMirror) {
   Write-Bad "DRIFT: Local Desktop mirror exists (NOT allowed): $localMirror"
   throw "DRIFT: Local Desktop mirror exists (remove it; only OneDrive Desktop mirror is allowed)."
 } else {
@@ -48,7 +62,7 @@ if ($missing.Count -gt 0) { throw "Required script(s) missing. Fix before contin
 
 # 3) Runtime drift indicators
 $lock = Join-Path $repo ".next\dev\lock"
-if (Test-Path $lock) { Write-Warn ".next dev lock exists: $lock" }
+if (Test-Path -LiteralPath $lock) { Write-Warn ".next dev lock exists: $lock" }
 else { Write-Ok "No .next dev lock." }
 
 $node = Get-Process node -ErrorAction SilentlyContinue
@@ -59,14 +73,14 @@ else { Write-Ok "No node processes running." }
 $zipCanonical = "C:\Users\lsphi\OneDrive\AI_Workspace\_SAVES\FGS\LATEST\FGS_LATEST.zip"
 $zipDesktop   = "C:\Users\lsphi\OneDrive\Desktop\FGS\FGS_LATEST.zip"
 
-if (!(Test-Path $zipCanonical)) { throw "Missing canonical ZIP: $zipCanonical" }
-if (!(Test-Path $zipDesktop))   { throw "Missing desktop ZIP:   $zipDesktop" }
+if (-not (Test-Path -LiteralPath $zipCanonical)) { throw "Missing canonical ZIP: $zipCanonical" }
+if (-not (Test-Path -LiteralPath $zipDesktop))   { throw "Missing desktop ZIP:   $zipDesktop" }
 
-$h1 = (Get-FileHash $zipCanonical -Algorithm SHA256).Hash
-$h2 = (Get-FileHash $zipDesktop   -Algorithm SHA256).Hash
+$h1 = (Get-FileHash -LiteralPath $zipCanonical -Algorithm SHA256).Hash
+$h2 = (Get-FileHash -LiteralPath $zipDesktop   -Algorithm SHA256).Hash
 
-$info1 = Get-Item $zipCanonical
-$info2 = Get-Item $zipDesktop
+$info1 = Get-Item -LiteralPath $zipCanonical
+$info2 = Get-Item -LiteralPath $zipDesktop
 
 Write-Host "`n--- ZIP STATUS ---"
 Write-Host ("Canonical: {0}  ({1} bytes)  {2}" -f $info1.FullName, $info1.Length, $info1.LastWriteTime)
@@ -84,7 +98,7 @@ else {
 $desktop = [Environment]::GetFolderPath('Desktop')
 
 # NOTE:
-# - GO must include -NoExit so the dev window stays open for log capture (professional-grade drift prevention).
+# - GO must include -NoExit so the dev window stays open for log capture.
 # - SAVE does not require -NoExit (it can exit when finished).
 $expected = @(
   @{
@@ -103,9 +117,10 @@ $expected = @(
 
 $wsh = New-Object -ComObject WScript.Shell
 Write-Host "`n--- SHORTCUT STATUS ---"
+
 foreach ($e in $expected) {
   $lnk = Join-Path $desktop $e.Name
-  if (!(Test-Path $lnk)) { throw "Missing shortcut on Desktop: $lnk" }
+  if (-not (Test-Path -LiteralPath $lnk)) { throw "Missing shortcut on Desktop: $lnk" }
 
   $s = $wsh.CreateShortcut($lnk)
   $tp = $s.TargetPath
@@ -124,7 +139,6 @@ foreach ($e in $expected) {
   }
 
   if ($e.RequireNoExit) {
-    # Token-aware check: ensure -NoExit exists as an argument token (case-insensitive)
     if ($args -notmatch '(?i)(^|\s)-NoExit(\s|$)') {
       Write-Bad "$($e.Name): Missing -NoExit (required so logs don't vanish)."
       Write-Host "  Args: $args"
