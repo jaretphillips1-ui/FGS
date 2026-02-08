@@ -17,6 +17,18 @@ function Get-FgsRepoRoot {
   return "$env:OneDrive\AI_Workspace\FGS\fgs-app"
 }
 
+function Get-OneDriveRoot {
+  $od = $env:OneDrive
+  if ([string]::IsNullOrWhiteSpace($od)) {
+    $od = Join-Path $env:USERPROFILE "OneDrive"
+  }
+  return $od
+}
+
+function Ensure-Dir([Parameter(Mandatory)][string]$Path) {
+  New-Item -ItemType Directory -Force -Path $Path | Out-Null
+}
+
 function Write-Ok($msg)   { Write-Host "✅ $msg" -ForegroundColor Green }
 function Write-Warn($msg) { Write-Host "⚠️  $msg" -ForegroundColor Yellow }
 function Write-Bad($msg)  { Write-Host "❌ $msg" -ForegroundColor Red }
@@ -40,45 +52,71 @@ function Invoke-Step {
   Write-Ok ("{0}: OK" -f $Name)
 }
 
-function Prune-SaveShutdownLogs {
+function Write-StatusFiles {
   param(
-    [Parameter(Mandatory)][string]$LogsDir,
-    [Parameter(Mandatory)][int]$Keep,
-    [Parameter(Mandatory)][string]$CurrentLogPath
+    [Parameter(Mandatory)][string]$StatusDir,
+    [Parameter(Mandatory)][ValidateSet("PASS","FAIL")][string]$Result,
+    [Parameter(Mandatory)][string]$Repo,
+    [Parameter(Mandatory)][string]$Head,
+    [Parameter(Mandatory)][string]$LogPath,
+    [string]$Message = ""
   )
 
-  try {
-    if (-not (Test-Path -LiteralPath $LogsDir)) { return }
+  Ensure-Dir $StatusDir
 
-    $files = Get-ChildItem -LiteralPath $LogsDir -File -Filter "FGS_SAVE_SHUTDOWN_*.log" -ErrorAction SilentlyContinue
-    if (-not $files) { return }
+  $ts = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+  $lastRun  = Join-Path $StatusDir "FGS_LAST_RUN.txt"
+  $lastFail = Join-Path $StatusDir "FGS_LAST_FAIL.txt"
 
-    # Newest first
-    $sorted = $files | Sort-Object LastWriteTime -Descending
-
-    # Skip newest $Keep; delete the rest, but never delete the current log
-    $toDelete = @()
-    $idx = 0
-    foreach ($f in $sorted) {
-      $idx++
-      if ($idx -le $Keep) { continue }
-      if ($f.FullName -eq $CurrentLogPath) { continue }
-      $toDelete += $f
-    }
-
-    foreach ($f in $toDelete) {
-      Remove-Item -LiteralPath $f.FullName -Force -ErrorAction SilentlyContinue
-    }
-
-    if ($toDelete.Count -gt 0) {
-      Write-Ok ("Log retention: pruned {0} old log(s); kept {1}." -f $toDelete.Count, $Keep)
-    } else {
-      Write-Ok ("Log retention: nothing to prune; kept {0}." -f $Keep)
-    }
-  } catch {
-    # Retention must never fail the main flow.
-    Write-Warn ("Log retention skipped (non-fatal): {0}" -f $_.Exception.Message)
+  $body = @()
+  $body += "FGS SAVE + VERIFY + SHUTDOWN"
+  $body += "Timestamp : $ts"
+  $body += "Result    : $Result"
+  $body += "Repo      : $Repo"
+  $body += "HEAD      : $Head"
+  $body += "Log       : $LogPath"
+  if (-not [string]::IsNullOrWhiteSpace($Message)) {
+    $body += ""
+    $body += "Message:"
+    $body += $Message
   }
+
+  Set-Content -LiteralPath $lastRun -Value ($body -join "`r`n") -Encoding UTF8
+
+  if ($Result -eq "FAIL") {
+    Set-Content -LiteralPath $lastFail -Value ($body -join "`r`n") -Encoding UTF8
+  } else {
+    if (Test-Path -LiteralPath $lastFail) { Remove-Item -Force -LiteralPath $lastFail }
+  }
+}
+
+function Notify-User {
+  param(
+    [Parameter(Mandatory)][string]$Title,
+    [Parameter(Mandatory)][string]$Text,
+    [ValidateSet("INFO","WARN","ERROR")][string]$Level = "INFO"
+  )
+
+  # Preferred: BurntToast (toast notification)
+  try {
+    if (Get-Module -ListAvailable -Name BurntToast) {
+      Import-Module BurntToast -ErrorAction Stop | Out-Null
+      New-BurntToastNotification -Text $Title, $Text | Out-Null
+      return
+    }
+  } catch {}
+
+  # Fallback: MessageBox (always visible)
+  try {
+    Add-Type -AssemblyName PresentationFramework -ErrorAction Stop
+    [System.Windows.MessageBox]::Show($Text, $Title) | Out-Null
+    return
+  } catch {}
+
+  # Last resort: console only
+  if ($Level -eq "ERROR") { Write-Bad $Text }
+  elseif ($Level -eq "WARN") { Write-Warn $Text }
+  else { Write-Ok $Text }
 }
 
 $repo = Get-FgsRepoRoot
@@ -86,16 +124,30 @@ Set-Location $repo
 
 # Log file (single artifact you can paste back)
 $logsDir = Join-Path $repo "scripts\logs"
-New-Item -ItemType Directory -Force -Path $logsDir | Out-Null
+Ensure-Dir $logsDir
 $stamp = Get-Date -Format "yyyyMMdd_HHmmss"
 $logPath = Join-Path $logsDir ("FGS_SAVE_SHUTDOWN_{0}.log" -f $stamp)
 
-# Retention policy (keep N most recent shutdown logs)
-$KEEP_SAVE_SHUTDOWN_LOGS = 30
+# Log retention (keep 30 most recent)
+try {
+  $keepLogs = 30
+  $logs = Get-ChildItem -LiteralPath $logsDir -File -Filter "FGS_SAVE_SHUTDOWN_*.log" -ErrorAction SilentlyContinue |
+    Sort-Object LastWriteTime -Descending
+  $toDelete = @($logs | Select-Object -Skip $keepLogs)
+  foreach ($f in $toDelete) { Remove-Item -Force -LiteralPath $f.FullName }
+  if (@($toDelete).Count -gt 0) { Write-Ok ("Log retention: pruned {0}; kept {1}." -f @(@($toDelete).Count, $keepLogs)) }
+  else { Write-Ok ("Log retention: nothing to prune; kept {0}." -f $keepLogs) }
+} catch {}
 
 Write-Host ("Log: {0}" -f $logPath)
-
 Start-Transcript -Path $logPath -Force | Out-Null
+
+# Status dir (ONE place to check later)
+$oneDriveRoot  = Get-OneDriveRoot
+$desktopODRoot = Join-Path $oneDriveRoot "Desktop"
+$deskODFGS     = Join-Path $desktopODRoot "FGS"
+
+$headLine = ""
 
 try {
   Write-Banner "FGS SAVE + VERIFY + SHUTDOWN"
@@ -106,25 +158,15 @@ try {
       throw "Repo is DIRTY. Commit/stash before save+shutdown."
     }
 
-    $head = (git log -1 --oneline)
-    Write-Host ("HEAD: {0}" -f $head)
+    $headLine = (git log -1 --oneline)
+    Write-Host ("HEAD: {0}" -f $headLine)
   }
 
   # Roots
   $desktopLocalRoot = Join-Path $env:USERPROFILE "Desktop"
-
-  $oneDriveRoot = $env:OneDrive
-  if ([string]::IsNullOrWhiteSpace($oneDriveRoot)) {
-    $oneDriveRoot = Join-Path $env:USERPROFILE "OneDrive"
-  }
-  $desktopODRoot = Join-Path $oneDriveRoot "Desktop"
-
   if (-not (Test-Path -LiteralPath $desktopODRoot)) {
     throw ("OneDrive Desktop root not found. Expected: {0}" -f $desktopODRoot)
   }
-
-  # POLICY: ONLY ONE desktop mirror is allowed (OneDrive Desktop\FGS)
-  $deskODFGS = Join-Path $desktopODRoot "FGS"
 
   # Canonical save root (ONE TRUE SAVE)
   $savesRoot = Join-Path $oneDriveRoot "AI_Workspace\_SAVES\FGS\LATEST"
@@ -148,7 +190,7 @@ try {
       Format-Table -AutoSize
 
     "`nContents of DesktopODFGS (top):"
-    New-Item -ItemType Directory -Force -Path $deskODFGS | Out-Null
+    Ensure-Dir $deskODFGS
     Get-ChildItem -LiteralPath $deskODFGS -File -ErrorAction SilentlyContinue |
       Sort-Object LastWriteTime -Descending |
       Select-Object -First 10 Name,Length,LastWriteTime |
@@ -160,7 +202,7 @@ try {
     if (Test-Path -LiteralPath $deskLocalFGS) {
       $stamp2 = Get-Date -Format "yyyyMMdd_HHmmss"
       $archive = Join-Path $archiveRoot ("LocalDesktop_FGS_{0}" -f $stamp2)
-      New-Item -ItemType Directory -Force -Path $archive | Out-Null
+      Ensure-Dir $archive
 
       Get-ChildItem -LiteralPath $deskLocalFGS -Force -ErrorAction SilentlyContinue |
         ForEach-Object {
@@ -192,7 +234,7 @@ try {
 
     if (-not (Test-Path -LiteralPath $Root)) { return }
 
-    New-Item -ItemType Directory -Force -Path $DestFolderFGS | Out-Null
+    Ensure-Dir $DestFolderFGS
 
     $off = @(
       Get-ChildItem -LiteralPath $Root -File -Filter "FGS_LATEST*.zip" -ErrorAction SilentlyContinue
@@ -218,7 +260,7 @@ try {
     if (-not (Test-Path -LiteralPath $canonZip))  { throw ("Missing canonical zip: {0}" -f $canonZip) }
     if (-not (Test-Path -LiteralPath $canonNote)) { throw ("Missing canonical note: {0}" -f $canonNote) }
 
-    New-Item -ItemType Directory -Force -Path $deskODFGS | Out-Null
+    Ensure-Dir $deskODFGS
     Copy-Item -Force -LiteralPath $canonZip  -Destination (Join-Path $deskODFGS "FGS_LATEST.zip")
     Copy-Item -Force -LiteralPath $canonNote -Destination (Join-Path $deskODFGS "FGS_LATEST_CHECKPOINT.txt")
     Write-Ok "Re-mirrored OneDrive Desktop\FGS from canonical _SAVES"
@@ -275,11 +317,25 @@ try {
     & (Join-Path $repo "scripts\fgs-hard-truth.ps1") | Out-Host
   }
 
+  # PASS breadcrumb + popup
+  Write-StatusFiles -StatusDir $deskODFGS -Result "PASS" -Repo $repo -Head $headLine -LogPath $logPath
+  Notify-User -Title "FGS Save + Shutdown" -Text "PASS — saved, mirrored, verified, and shutdown complete."
+
   Write-Banner "FGS SAVE + VERIFY + SHUTDOWN: PASS"
   Write-Host ("Log: {0}" -f $logPath)
   exit 0
 }
 catch {
+  $msg = $_.Exception.Message
+  try { if ($_.ScriptStackTrace) { $msg = $msg + "`r`n`r`nSTACK:`r`n" + $_.ScriptStackTrace } } catch {}
+
+  $headNow = ""
+  try { $headNow = (git log -1 --oneline) } catch {}
+
+  # FAIL breadcrumb + popup
+  Write-StatusFiles -StatusDir $deskODFGS -Result "FAIL" -Repo $repo -Head $headNow -LogPath $logPath -Message $msg
+  Notify-User -Title "FGS Save + Shutdown" -Text "FAIL — open OneDrive\Desktop\FGS\FGS_LAST_FAIL.txt for details."
+
   Write-Banner "FGS SAVE + VERIFY + SHUTDOWN: FAIL"
   Write-Bad $_.Exception.Message
 
@@ -291,11 +347,10 @@ catch {
 
   ""
   Write-Host ("Log: {0}" -f $logPath)
+
+  Read-Host "Press Enter to close (FAIL)"
   exit 1
 }
 finally {
-  try { Stop-Transcript | Out-Null } catch { }
-
-  # Log retention (non-fatal)
-  Prune-SaveShutdownLogs -LogsDir $logsDir -Keep $KEEP_SAVE_SHUTDOWN_LOGS -CurrentLogPath $logPath | Out-Host
+  try { Stop-Transcript | Out-Null } catch {}
 }
