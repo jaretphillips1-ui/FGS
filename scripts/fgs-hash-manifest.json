@@ -1,0 +1,70 @@
+{
+  "generated_at": "2026-02-08T11:42:55.0579300-04:00",
+  "repo": "C:\\Users\\lsphi\\OneDrive\\AI_Workspace\\FGS\\fgs-app",
+  "files": [
+    {
+      "path": "scripts\\fgs-verify.ps1",
+      "sha256": "35424EF778665710EC3722DD8069DFEFA25E4A4AD86BF412974836809851FFEF"
+    },
+    {
+      "path": "scripts\\fgs-eventlog.ps1",
+      "sha256": "A37B3BC8C10172BAAAB433A3B86F3A4F53F77CB922FD30489D155500752C07F3"
+    },
+    {
+      "path": "scripts\\fgs-backup.ps1",
+      "sha256": "915501DD35DF303EAE7752A114059399D421CCC767C8E187E5CA1BDFAC7734A3"
+    },
+    {
+      "path": "scripts\\fgs-save-shutdown.ps1",
+      "sha256": "055C05244554C628442B52760C24D32D6FB78D9554C0C6406490C966016B7E51"
+    },
+    {
+      "path": "scripts\\fgs-hard-truth.ps1",
+      "sha256": "F5527700DB41F6F388761CA40530047B1E0A4DD3C293AA3179DCA4C080CE6E7D"
+    },
+    {
+      "path": "scripts\\fgs-truth.ps1",
+      "sha256": "A94718C53CE5FB88BC4F16FD78DA76334F2FCDC14C711F4AA0A8AEF6F866F63B"
+    },
+    {
+      "path": "scripts\\fgs-verify-mirror.ps1",
+      "sha256": "466EB7A48E2D7B14F9EED5B579AAF6AD333A3A7EEEBBE8832C445881D7181F8E"
+    },
+    {
+      "path": "scripts\\fgs-apply-file.ps1",
+      "sha256": "F5F77B2012FDCE12F2306410CAFE3D66616687B4469D29AC9BCFC64FA1A2F151"
+    },
+    {
+      "path": "scripts\\fgs-up.ps1",
+      "sha256": "51AD77089A10ACBCA5F5C1FDCF401C8C571DFA00EFE4AC3E76FC704665AD4583"
+    },
+    {
+      "path": "scripts\\fgs-down.ps1",
+      "sha256": "5840DDDFC2BE0ECA8D95DCF75289B47EA6FEB04DA942A52192D17AB189D79943"
+    },
+    {
+      "path": "scripts\\fgs-dev.ps1",
+      "sha256": "8386534515ED5D55BDECACFCF3BD259183B3C4EA751B57496F425904E3E93519"
+    },
+    {
+      "path": "scripts\\fgs-resume.ps1",
+      "sha256": "C657D8EA34CBF24DB6DE8BD651A383CD2A7FD220F8BF34A26375A40F425349E0"
+    },
+    {
+      "path": "scripts\\FGS-GO.ps1",
+      "sha256": "0163AAB740FA93DC6834436F648973CF7E6FD9FBD2BBDAED0F05343B5141966F"
+    },
+    {
+      "path": "scripts\\install-fgs-hard-truth-footer.ps1",
+      "sha256": "B084FEC5ACDB901DB3ABF86B7D1DF340E979A56F206BAAFD452046FB346CDE35"
+    },
+    {
+      "path": "scripts\\Save-FGS.ps1",
+      "sha256": "DEC2C279EB8AAE80B56D6500770A97A01F93A3AF359713CA4B7E59DA57D75CE7"
+    },
+    {
+      "path": "scripts\\Save-FGS-Verified.ps1",
+      "sha256": "949C7092304902A145A965D259CF78E077BECF095E8DD4CD0CBDAC9F7736E708"
+    }
+  ]
+}
