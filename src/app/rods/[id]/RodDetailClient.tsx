@@ -34,6 +34,15 @@ const WATER_TYPES: { value: WaterType; label: string }[] = [
   { value: "ice", label: "Ice" },
 ];
 
+const TECHNIQUE_KEYS = new Set([
+  "rod_techniques",
+  "techniques",
+  "technique_list",
+  "technique",
+  "rod_technique",
+  "techniques_json",
+]);
+
 function errMsg(e: unknown, fallback: string) {
   if (e instanceof Error) return e.message || fallback;
   if (typeof e === "string") return e || fallback;
@@ -108,12 +117,7 @@ const READONLY_KEYS = new Set(["id", "created_at", "updated_at", "owner_id", "ge
 
 // Keys we never want to show/edit in the generic editor section
 const HIDE_KEYS = new Set([
-  "rod_techniques",
-  "techniques",
-  "technique_list",
-  "technique",
-  "rod_technique",
-  "techniques_json",
+  ...Array.from(TECHNIQUE_KEYS),
 
   // We render these in nicer dedicated sections:
   "saltwater_ok",
@@ -273,6 +277,85 @@ function StepperNumber({
   );
 }
 
+function OzSelect({
+  value,
+  onChange,
+  disabled,
+  min = 0,
+  max = 32,
+}: {
+  value: number | null;
+  onChange: (next: number | null) => void;
+  disabled?: boolean;
+  min?: number;
+  max?: number;
+}) {
+  // Common retail-style weights (focused on bass gear). Stored as decimal ounces.
+  const options: { label: string; val: number }[] = [
+    { label: "—", val: NaN },
+    { label: "1/32", val: 1 / 32 },
+    { label: "1/16", val: 1 / 16 },
+    { label: "3/32", val: 3 / 32 },
+    { label: "1/8", val: 1 / 8 },
+    { label: "3/16", val: 3 / 16 },
+    { label: "1/4", val: 1 / 4 },
+    { label: "5/16", val: 5 / 16 },
+    { label: "3/8", val: 3 / 8 },
+    { label: "7/16", val: 7 / 16 },
+    { label: "1/2", val: 1 / 2 },
+    { label: "5/8", val: 5 / 8 },
+    { label: "3/4", val: 3 / 4 },
+    { label: "7/8", val: 7 / 8 },
+    { label: "1", val: 1 },
+    { label: "1 1/8", val: 1 + 1 / 8 },
+    { label: "1 1/4", val: 1 + 1 / 4 },
+    { label: "1 3/8", val: 1 + 3 / 8 },
+    { label: "1 1/2", val: 1 + 1 / 2 },
+    { label: "1 5/8", val: 1 + 5 / 8 },
+    { label: "1 3/4", val: 1 + 3 / 4 },
+    { label: "2", val: 2 },
+    { label: "2 1/2", val: 2.5 },
+    { label: "3", val: 3 },
+    { label: "4", val: 4 },
+    { label: "5", val: 5 },
+    { label: "6", val: 6 },
+    { label: "8", val: 8 },
+    { label: "10", val: 10 },
+    { label: "12", val: 12 },
+    { label: "16", val: 16 },
+    { label: "20", val: 20 },
+    { label: "24", val: 24 },
+    { label: "32", val: 32 },
+  ].filter((o) => Number.isNaN(o.val) || (o.val >= min && o.val <= max));
+
+  const selected =
+    value == null || !Number.isFinite(value) ? "" : String(value);
+
+  return (
+    <select
+      className="border rounded px-3 py-2"
+      value={selected}
+      disabled={disabled}
+      onChange={(e) => {
+        const s = e.target.value;
+        if (!s) return onChange(null);
+        const n = Number(s);
+        if (!Number.isFinite(n)) return onChange(null);
+        onChange(clampNum(n, min, max));
+      }}
+    >
+      {options.map((o) => {
+        const v = Number.isNaN(o.val) ? "" : String(o.val);
+        return (
+          <option key={o.label} value={v}>
+            {o.label}
+          </option>
+        );
+      })}
+    </select>
+  );
+}
+
 export default function RodDetailClient({
   id,
   initial,
@@ -339,10 +422,11 @@ export default function RodDetailClient({
   const lureMinKey = useMemo(() => pickFirstExistingKey(original, ["rod_lure_min_oz"]), [original]);
   const lureMaxKey = useMemo(() => pickFirstExistingKey(original, ["rod_lure_max_oz"]), [original]);
 
+  // IMPORTANT: editableKeys should include hidden-but-editable keys
   const editableKeys = useMemo(() => {
     if (!original) return [];
     return Object.keys(original)
-      .filter((k) => !READONLY_KEYS.has(k) && !HIDE_KEYS.has(k))
+      .filter((k) => !READONLY_KEYS.has(k))
       .sort();
   }, [original]);
 
@@ -400,6 +484,7 @@ export default function RodDetailClient({
 
     for (const k of editableKeys) {
       if (k === lengthKey) continue;
+      if (TECHNIQUE_KEYS.has(k)) continue; // techniques handled separately
       const before = original[k];
       const after = draft[k];
       if (!shouldIncludeKeyInPatch(k, after)) continue;
@@ -542,6 +627,7 @@ export default function RodDetailClient({
       for (const k of editableKeys) {
         if (k === "name") continue;
         if (k === lengthKey) continue;
+        if (TECHNIQUE_KEYS.has(k)) continue; // techniques handled separately
         const before = original[k];
         const after = draft[k];
         if (!shouldIncludeKeyInPatch(k, after)) continue;
@@ -615,7 +701,8 @@ export default function RodDetailClient({
     ].filter(Boolean)
   );
 
-  const otherKeys = editableKeys.filter((k) => !renderedKeys.has(k));
+  // Only show keys that are not rendered in dedicated UI AND not hidden
+  const otherKeys = editableKeys.filter((k) => !renderedKeys.has(k) && !HIDE_KEYS.has(k));
 
   const currentWaterType: WaterType = waterTypeKey
     ? normalizeWaterType((draft as AnyRecord)[waterTypeKey])
@@ -632,9 +719,7 @@ export default function RodDetailClient({
         </div>
 
         <div className="flex items-center gap-2">
-          {(isDirty || techniquesDirty) && (
-            <span className="text-sm text-amber-600">Unsaved changes</span>
-          )}
+          {(isDirty || techniquesDirty) && <span className="text-sm text-amber-600">Unsaved changes</span>}
 
           <button className="px-4 py-2 rounded border" onClick={() => router.push("/rods")}>
             Back
@@ -661,12 +746,8 @@ export default function RodDetailClient({
       </div>
 
       {err && <div className="border rounded p-3 bg-red-50 text-red-800">{err}</div>}
-      {validationErr && (
-        <div className="border rounded p-3 bg-red-50 text-red-800">{validationErr}</div>
-      )}
-      {savedMsg && (
-        <div className="border rounded p-3 bg-green-50 text-green-800">{savedMsg}</div>
-      )}
+      {validationErr && <div className="border rounded p-3 bg-red-50 text-red-800">{validationErr}</div>}
+      {savedMsg && <div className="border rounded p-3 bg-green-50 text-green-800">{savedMsg}</div>}
 
       <section className="border rounded p-4 space-y-4">
         <h2 className="text-sm font-semibold text-gray-700">Basics</h2>
@@ -830,7 +911,7 @@ export default function RodDetailClient({
                   <label className="grid gap-1">
                     <div className="text-xs text-gray-600">Min</div>
                     <StepperNumber
-                      value={lineMinKey ? (Number((draft as AnyRecord)[lineMinKey] ?? NaN) as number) : null}
+                      value={lineMinKey ? (typeof (draft as AnyRecord)[lineMinKey] === "number" ? ((draft as AnyRecord)[lineMinKey] as number) : null) : null}
                       onChange={(v) => lineMinKey && setDraft((d) => ({ ...(d ?? {}), [lineMinKey]: v }))}
                       min={0}
                       max={200}
@@ -842,7 +923,7 @@ export default function RodDetailClient({
                   <label className="grid gap-1">
                     <div className="text-xs text-gray-600">Max</div>
                     <StepperNumber
-                      value={lineMaxKey ? (Number((draft as AnyRecord)[lineMaxKey] ?? NaN) as number) : null}
+                      value={lineMaxKey ? (typeof (draft as AnyRecord)[lineMaxKey] === "number" ? ((draft as AnyRecord)[lineMaxKey] as number) : null) : null}
                       onChange={(v) => lineMaxKey && setDraft((d) => ({ ...(d ?? {}), [lineMaxKey]: v }))}
                       min={0}
                       max={200}
@@ -861,28 +942,34 @@ export default function RodDetailClient({
                 <div className="grid grid-cols-2 gap-2">
                   <label className="grid gap-1">
                     <div className="text-xs text-gray-600">Min</div>
-                    <StepperNumber
-                      value={lureMinKey ? (Number((draft as AnyRecord)[lureMinKey] ?? NaN) as number) : null}
+                    <OzSelect
+                      value={
+                        lureMinKey
+                          ? (typeof (draft as AnyRecord)[lureMinKey] === "number"
+                              ? ((draft as AnyRecord)[lureMinKey] as number)
+                              : null)
+                          : null
+                      }
                       onChange={(v) => lureMinKey && setDraft((d) => ({ ...(d ?? {}), [lureMinKey]: v }))}
+                      disabled={!lureMinKey}
                       min={0}
                       max={32}
-                      step={0.0625}
-                      disabled={!lureMinKey}
-                      placeholder="Min"
-                      inputMode="decimal"
                     />
                   </label>
                   <label className="grid gap-1">
                     <div className="text-xs text-gray-600">Max</div>
-                    <StepperNumber
-                      value={lureMaxKey ? (Number((draft as AnyRecord)[lureMaxKey] ?? NaN) as number) : null}
+                    <OzSelect
+                      value={
+                        lureMaxKey
+                          ? (typeof (draft as AnyRecord)[lureMaxKey] === "number"
+                              ? ((draft as AnyRecord)[lureMaxKey] as number)
+                              : null)
+                          : null
+                      }
                       onChange={(v) => lureMaxKey && setDraft((d) => ({ ...(d ?? {}), [lureMaxKey]: v }))}
+                      disabled={!lureMaxKey}
                       min={0}
                       max={32}
-                      step={0.0625}
-                      disabled={!lureMaxKey}
-                      placeholder="Max"
-                      inputMode="decimal"
                     />
                   </label>
                 </div>
@@ -908,8 +995,10 @@ export default function RodDetailClient({
             const active = techniques.includes(t);
             const isPrimary = primaryTechnique === t;
 
-            const cls = active
+            const cls = isPrimary
               ? "px-3 py-1 rounded border text-sm bg-green-600 text-white border-green-700"
+              : active
+              ? "px-3 py-1 rounded border text-sm bg-gray-700 text-white border-gray-800"
               : "px-3 py-1 rounded border text-sm bg-gray-100 text-gray-800 border-gray-300 hover:bg-gray-200";
 
             return (
