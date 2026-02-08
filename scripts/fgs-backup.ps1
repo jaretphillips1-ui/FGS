@@ -1,6 +1,7 @@
 #@FGS_DESKTOP_MIRROR
 #@FGS_BACKUP_HEADER
 # FGS Backup (no-drift): works when executed as a script OR pasted
+# POLICY: Only OneDrive Desktop mirror is allowed. Never write to local Desktop\FGS.
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
@@ -49,9 +50,8 @@ New-Item -ItemType Directory -Force -Path $saves | Out-Null
 Write-Host "`n=== FGS BACKUP ==="
 Write-Host "Repo: $repo"
 
-# Desktop folders (IMPORTANT: never write to Desktop root)
+# Desktop roots
 $desktopLocalRoot = Join-Path $env:USERPROFILE "Desktop"
-$desktopLocalFGS  = Join-Path $desktopLocalRoot "FGS"
 
 $oneDriveRoot = $env:OneDrive
 if ([string]::IsNullOrWhiteSpace($oneDriveRoot)) {
@@ -59,6 +59,9 @@ if ([string]::IsNullOrWhiteSpace($oneDriveRoot)) {
 }
 $desktopOneDriveRoot = Join-Path $oneDriveRoot "Desktop"
 $desktopOneDriveFGS  = Join-Path $desktopOneDriveRoot "FGS"
+
+# Drift archive root (for any unexpected local Desktop\FGS folder)
+$archiveRoot = Join-Path $oneDriveRoot "AI_Workspace\_SAVES\FGS\DESKTOP_ARCHIVE"
 
 $notePath   = Join-Path $saves "FGS_LATEST_CHECKPOINT.txt"
 $latestZip  = Join-Path $saves "FGS_LATEST.zip"
@@ -73,7 +76,6 @@ Commit: $(git rev-parse --short HEAD)
 Summary: Backup via scripts\fgs-backup.ps1
 Latest ZIP: $latestZip
 Stamped ZIP: $stampedZip
-Desktop ZIP (local folder): $desktopLocalFGS\FGS_LATEST.zip
 Desktop ZIP (OneDrive folder): $desktopOneDriveFGS\FGS_LATEST.zip
 "@
 
@@ -104,10 +106,10 @@ Write-Host "  $notePath"
 $null = New-FGSBackupMarker -Kind MIRROR
 
 # ============================
-# MIRROR (NO DESKTOP ROOT)
-# - Mirror ZIP + CHECKPOINT into Desktop\FGS
-# - Optionally also into OneDrive\Desktop\FGS if OneDrive Desktop exists
-# - Sweep any legacy offenders off Desktop roots into the folder
+# MIRROR (NO LOCAL DESKTOP\FGS)
+# - Mirror ZIP + CHECKPOINT into OneDrive\Desktop\FGS only
+# - Sweep offenders off Desktop roots into OneDrive\Desktop\FGS
+# - If local Desktop\FGS exists, archive+remove it
 # ============================
 try {
   if (-not (Test-Path -LiteralPath $latestZip)) {
@@ -117,63 +119,57 @@ try {
     throw "Checkpoint note missing for mirror: $notePath"
   }
 
-  $targets = @()
-
-  # Local Desktop\FGS (always)
-  if (Test-Path -LiteralPath $desktopLocalRoot) {
-    New-Item -ItemType Directory -Force -Path $desktopLocalFGS | Out-Null
-    $targets += [pscustomobject]@{
-      Name      = "DesktopLocalFGS"
-      ZipPath   = (Join-Path $desktopLocalFGS "FGS_LATEST.zip")
-      NotePath  = (Join-Path $desktopLocalFGS "FGS_LATEST_CHECKPOINT.txt")
-      Root      = $desktopLocalRoot
-      FolderFGS = $desktopLocalFGS
-    }
+  if (-not (Test-Path -LiteralPath $desktopOneDriveRoot)) {
+    throw "OneDrive Desktop root not found: $desktopOneDriveRoot"
   }
 
-  # OneDrive Desktop\FGS (only if OneDrive Desktop exists)
-  if (Test-Path -LiteralPath $desktopOneDriveRoot) {
-    New-Item -ItemType Directory -Force -Path $desktopOneDriveFGS | Out-Null
-    $targets += [pscustomobject]@{
-      Name      = "DesktopOneDriveFGS"
-      ZipPath   = (Join-Path $desktopOneDriveFGS "FGS_LATEST.zip")
-      NotePath  = (Join-Path $desktopOneDriveFGS "FGS_LATEST_CHECKPOINT.txt")
-      Root      = $desktopOneDriveRoot
-      FolderFGS = $desktopOneDriveFGS
-    }
+  # HARD GUARD: local Desktop\FGS is not allowed; archive+remove if present
+  $desktopLocalFGS = Join-Path $desktopLocalRoot "FGS"
+  if (Test-Path -LiteralPath $desktopLocalFGS) {
+    $stamp2  = Get-Date -Format "yyyyMMdd_HHmmss"
+    $archive = Join-Path $archiveRoot "LocalDesktop_FGS_$stamp2"
+    New-Item -ItemType Directory -Force -Path $archive | Out-Null
+
+    Get-ChildItem -LiteralPath $desktopLocalFGS -Force -ErrorAction SilentlyContinue |
+      ForEach-Object {
+        Copy-Item -Force -LiteralPath $_.FullName -Destination (Join-Path $archive $_.Name)
+      }
+
+    Remove-Item -Recurse -Force -LiteralPath $desktopLocalFGS
+    Write-Warning "Local Desktop\FGS mirror detected and removed (archived to): $archive"
   }
 
-  if (@($targets).Count -eq 0) {
-    Write-Warning "Desktop mirror skipped: no Desktop targets found."
-  } else {
-    foreach ($t in $targets) {
-      Copy-Item -LiteralPath $latestZip -Destination $t.ZipPath  -Force
-      Copy-Item -LiteralPath $notePath  -Destination $t.NotePath -Force
-    }
+  # OneDrive Desktop\FGS (ONLY)
+  New-Item -ItemType Directory -Force -Path $desktopOneDriveFGS | Out-Null
 
-    Write-Host "✅ Desktop mirrored (folder-only):" -ForegroundColor Green
-    foreach ($t in $targets) {
-      Write-Host ("  {0}: {1}" -f $t.Name, (Split-Path -Parent $t.ZipPath))
-    }
-  }
+  Copy-Item -LiteralPath $latestZip -Destination (Join-Path $desktopOneDriveFGS "FGS_LATEST.zip") -Force
+  Copy-Item -LiteralPath $notePath  -Destination (Join-Path $desktopOneDriveFGS "FGS_LATEST_CHECKPOINT.txt") -Force
 
-  # Legacy offenders sweep: NEVER allow these on Desktop roots
-  foreach ($t in $targets) {
-    $off = @(
-      Get-ChildItem -LiteralPath $t.Root -File -Filter "FGS_LATEST*.zip" -ErrorAction SilentlyContinue
-      Get-ChildItem -LiteralPath $t.Root -File -Filter "FGS_LATEST*CHECKPOINT*.txt" -ErrorAction SilentlyContinue
+  Write-Host "✅ Desktop mirrored (OneDrive folder-only):" -ForegroundColor Green
+  Write-Host ("  {0}" -f $desktopOneDriveFGS)
+
+  # Sweep any legacy offenders off Desktop roots (local + OneDrive desktop root) into OneDrive\Desktop\FGS
+  function Sweep-Offenders([Parameter(Mandatory)][string]$Root, [Parameter(Mandatory)][string]$Name) {
+    if (-not (Test-Path -LiteralPath $Root)) { return }
+
+    [array]$off = @(
+      Get-ChildItem -LiteralPath $Root -File -Filter "FGS_LATEST*.zip" -ErrorAction SilentlyContinue
+      Get-ChildItem -LiteralPath $Root -File -Filter "FGS_LATEST*CHECKPOINT*.txt" -ErrorAction SilentlyContinue
     ) | Where-Object { $_ }
 
     if (@($off).Count -gt 0) {
       foreach ($f in $off) {
-        Move-Item -Force -LiteralPath $f.FullName -Destination (Join-Path $t.FolderFGS $f.Name)
+        Move-Item -Force -LiteralPath $f.FullName -Destination (Join-Path $desktopOneDriveFGS $f.Name)
       }
-      Write-Host ("🧹 Swept {0} offender(s) off {1} root -> {2}" -f @($off).Count, $t.Name, $t.FolderFGS) -ForegroundColor Yellow
+      Write-Host ("🧹 Swept {0} offender(s) off {1} Desktop ROOT -> OneDrive\Desktop\FGS" -f @($off).Count, $Name) -ForegroundColor Yellow
     }
   }
 
+  Sweep-Offenders -Root $desktopLocalRoot    -Name "local"
+  Sweep-Offenders -Root $desktopOneDriveRoot -Name "od"
+
 } catch {
-  Write-Warning ("Desktop mirror (folder-only) failed: " + $_.Exception.Message)
+  Write-Warning ("Desktop mirror (OneDrive folder-only) failed: " + $_.Exception.Message)
 }
 
 # ============================
@@ -186,7 +182,6 @@ try {
 
     $keep = 20
 
-    # Force array no matter what (0/1/many)
     [array]$timestamped = @(
       Get-ChildItem -LiteralPath $saves -File -Filter "FGS_LATEST_*.zip" -ErrorAction SilentlyContinue |
       Sort-Object LastWriteTime -Descending
