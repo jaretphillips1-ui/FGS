@@ -147,7 +147,8 @@ $oneDriveRoot  = Get-OneDriveRoot
 $desktopODRoot = Join-Path $oneDriveRoot "Desktop"
 $deskODFGS     = Join-Path $desktopODRoot "FGS"
 
-$headLine = ""
+# IMPORTANT: write to script scope so it survives Invoke-Step scriptblocks
+$script:headLine = ""
 
 try {
   Write-Banner "FGS SAVE + VERIFY + SHUTDOWN"
@@ -158,8 +159,8 @@ try {
       throw "Repo is DIRTY. Commit/stash before save+shutdown."
     }
 
-    $headLine = (git log -1 --oneline)
-    Write-Host ("HEAD: {0}" -f $headLine)
+    $script:headLine = (git log -1 --oneline)
+    Write-Host ("HEAD: {0}" -f $script:headLine)
   }
 
   # Roots
@@ -317,8 +318,11 @@ try {
     & (Join-Path $repo "scripts\fgs-hard-truth.ps1") | Out-Host
   }
 
-  # PASS breadcrumb + popup
-  Write-StatusFiles -StatusDir $deskODFGS -Result "PASS" -Repo $repo -Head $headLine -LogPath $logPath
+  # PASS breadcrumb + popup (fallback head if somehow empty)
+  $headFinal = $script:headLine
+  if ([string]::IsNullOrWhiteSpace($headFinal)) { $headFinal = (git log -1 --oneline) }
+
+  Write-StatusFiles -StatusDir $deskODFGS -Result "PASS" -Repo $repo -Head $headFinal -LogPath $logPath
   Notify-User -Title "FGS Save + Shutdown" -Text "PASS — saved, mirrored, verified, and shutdown complete."
 
   Write-Banner "FGS SAVE + VERIFY + SHUTDOWN: PASS"
@@ -332,9 +336,8 @@ catch {
   $headNow = ""
   try { $headNow = (git log -1 --oneline) } catch {}
 
-  # FAIL breadcrumb + popup
   Write-StatusFiles -StatusDir $deskODFGS -Result "FAIL" -Repo $repo -Head $headNow -LogPath $logPath -Message $msg
-  Notify-User -Title "FGS Save + Shutdown" -Text "FAIL — open OneDrive\Desktop\FGS\FGS_LAST_FAIL.txt for details."
+  Notify-User -Title "FGS Save + Shutdown" -Text "FAIL — open OneDrive\Desktop\FGS\FGS_LAST_FAIL.txt for details." -Level "ERROR"
 
   Write-Banner "FGS SAVE + VERIFY + SHUTDOWN: FAIL"
   Write-Bad $_.Exception.Message
