@@ -43,6 +43,46 @@ const TECHNIQUE_KEYS = new Set([
   "techniques_json",
 ]);
 
+type LureOption = { label: string; value: number | null };
+const LURE_OZ_OPTIONS: readonly LureOption[] = [
+  { label: "—", value: null },
+
+  { label: "1/32", value: 1 / 32 },
+  { label: "1/16", value: 1 / 16 },
+  { label: "3/32", value: 3 / 32 },
+  { label: "1/8", value: 1 / 8 },
+  { label: "3/16", value: 3 / 16 },
+  { label: "1/4", value: 1 / 4 },
+  { label: "5/16", value: 5 / 16 },
+  { label: "3/8", value: 3 / 8 },
+  { label: "7/16", value: 7 / 16 },
+  { label: "1/2", value: 1 / 2 },
+  { label: "5/8", value: 5 / 8 },
+  { label: "3/4", value: 3 / 4 },
+  { label: "7/8", value: 7 / 8 },
+
+  { label: "1", value: 1 },
+  { label: "1 1/8", value: 1 + 1 / 8 },
+  { label: "1 1/4", value: 1 + 1 / 4 },
+  { label: "1 3/8", value: 1 + 3 / 8 },
+  { label: "1 1/2", value: 1 + 1 / 2 },
+  { label: "1 5/8", value: 1 + 5 / 8 },
+  { label: "1 3/4", value: 1 + 3 / 4 },
+  { label: "2", value: 2 },
+  { label: "2 1/2", value: 2 + 1 / 2 },
+  { label: "3", value: 3 },
+] as const;
+
+function lureValueToKey(v: number | null): string {
+  return v == null ? "" : String(v);
+}
+
+function lureKeyToValue(k: string): number | null {
+  if (!k) return null;
+  const n = Number(k);
+  return Number.isFinite(n) ? n : null;
+}
+
 function errMsg(e: unknown, fallback: string) {
   if (e instanceof Error) return e.message || fallback;
   if (typeof e === "string") return e || fallback;
@@ -274,85 +314,6 @@ function StepperNumber({
         </button>
       </div>
     </div>
-  );
-}
-
-function OzSelect({
-  value,
-  onChange,
-  disabled,
-  min = 0,
-  max = 32,
-}: {
-  value: number | null;
-  onChange: (next: number | null) => void;
-  disabled?: boolean;
-  min?: number;
-  max?: number;
-}) {
-  // Common retail-style weights (focused on bass gear). Stored as decimal ounces.
-  const options: { label: string; val: number }[] = [
-    { label: "—", val: NaN },
-    { label: "1/32", val: 1 / 32 },
-    { label: "1/16", val: 1 / 16 },
-    { label: "3/32", val: 3 / 32 },
-    { label: "1/8", val: 1 / 8 },
-    { label: "3/16", val: 3 / 16 },
-    { label: "1/4", val: 1 / 4 },
-    { label: "5/16", val: 5 / 16 },
-    { label: "3/8", val: 3 / 8 },
-    { label: "7/16", val: 7 / 16 },
-    { label: "1/2", val: 1 / 2 },
-    { label: "5/8", val: 5 / 8 },
-    { label: "3/4", val: 3 / 4 },
-    { label: "7/8", val: 7 / 8 },
-    { label: "1", val: 1 },
-    { label: "1 1/8", val: 1 + 1 / 8 },
-    { label: "1 1/4", val: 1 + 1 / 4 },
-    { label: "1 3/8", val: 1 + 3 / 8 },
-    { label: "1 1/2", val: 1 + 1 / 2 },
-    { label: "1 5/8", val: 1 + 5 / 8 },
-    { label: "1 3/4", val: 1 + 3 / 4 },
-    { label: "2", val: 2 },
-    { label: "2 1/2", val: 2.5 },
-    { label: "3", val: 3 },
-    { label: "4", val: 4 },
-    { label: "5", val: 5 },
-    { label: "6", val: 6 },
-    { label: "8", val: 8 },
-    { label: "10", val: 10 },
-    { label: "12", val: 12 },
-    { label: "16", val: 16 },
-    { label: "20", val: 20 },
-    { label: "24", val: 24 },
-    { label: "32", val: 32 },
-  ].filter((o) => Number.isNaN(o.val) || (o.val >= min && o.val <= max));
-
-  const selected =
-    value == null || !Number.isFinite(value) ? "" : String(value);
-
-  return (
-    <select
-      className="border rounded px-3 py-2"
-      value={selected}
-      disabled={disabled}
-      onChange={(e) => {
-        const s = e.target.value;
-        if (!s) return onChange(null);
-        const n = Number(s);
-        if (!Number.isFinite(n)) return onChange(null);
-        onChange(clampNum(n, min, max));
-      }}
-    >
-      {options.map((o) => {
-        const v = Number.isNaN(o.val) ? "" : String(o.val);
-        return (
-          <option key={o.label} value={v}>
-            {o.label}
-          </option>
-        );
-      })}
-    </select>
   );
 }
 
@@ -911,7 +872,13 @@ export default function RodDetailClient({
                   <label className="grid gap-1">
                     <div className="text-xs text-gray-600">Min</div>
                     <StepperNumber
-                      value={lineMinKey ? (typeof (draft as AnyRecord)[lineMinKey] === "number" ? ((draft as AnyRecord)[lineMinKey] as number) : null) : null}
+                      value={
+                        lineMinKey
+                          ? typeof (draft as AnyRecord)[lineMinKey] === "number"
+                            ? ((draft as AnyRecord)[lineMinKey] as number)
+                            : null
+                          : null
+                      }
                       onChange={(v) => lineMinKey && setDraft((d) => ({ ...(d ?? {}), [lineMinKey]: v }))}
                       min={0}
                       max={200}
@@ -923,7 +890,13 @@ export default function RodDetailClient({
                   <label className="grid gap-1">
                     <div className="text-xs text-gray-600">Max</div>
                     <StepperNumber
-                      value={lineMaxKey ? (typeof (draft as AnyRecord)[lineMaxKey] === "number" ? ((draft as AnyRecord)[lineMaxKey] as number) : null) : null}
+                      value={
+                        lineMaxKey
+                          ? typeof (draft as AnyRecord)[lineMaxKey] === "number"
+                            ? ((draft as AnyRecord)[lineMaxKey] as number)
+                            : null
+                          : null
+                      }
                       onChange={(v) => lineMaxKey && setDraft((d) => ({ ...(d ?? {}), [lineMaxKey]: v }))}
                       min={0}
                       max={200}
@@ -942,35 +915,58 @@ export default function RodDetailClient({
                 <div className="grid grid-cols-2 gap-2">
                   <label className="grid gap-1">
                     <div className="text-xs text-gray-600">Min</div>
-                    <OzSelect
-                      value={
+                    <select
+                      className="border rounded px-3 py-2"
+                      value={lureValueToKey(
                         lureMinKey
                           ? (typeof (draft as AnyRecord)[lureMinKey] === "number"
                               ? ((draft as AnyRecord)[lureMinKey] as number)
                               : null)
                           : null
+                      )}
+                      onChange={(e) =>
+                        lureMinKey &&
+                        setDraft((d) => ({
+                          ...(d ?? {}),
+                          [lureMinKey]: lureKeyToValue(e.target.value),
+                        }))
                       }
-                      onChange={(v) => lureMinKey && setDraft((d) => ({ ...(d ?? {}), [lureMinKey]: v }))}
                       disabled={!lureMinKey}
-                      min={0}
-                      max={32}
-                    />
+                    >
+                      {LURE_OZ_OPTIONS.map((o) => (
+                        <option key={o.label} value={lureValueToKey(o.value)}>
+                          {o.label}
+                        </option>
+                      ))}
+                    </select>
                   </label>
+
                   <label className="grid gap-1">
                     <div className="text-xs text-gray-600">Max</div>
-                    <OzSelect
-                      value={
+                    <select
+                      className="border rounded px-3 py-2"
+                      value={lureValueToKey(
                         lureMaxKey
                           ? (typeof (draft as AnyRecord)[lureMaxKey] === "number"
                               ? ((draft as AnyRecord)[lureMaxKey] as number)
                               : null)
                           : null
+                      )}
+                      onChange={(e) =>
+                        lureMaxKey &&
+                        setDraft((d) => ({
+                          ...(d ?? {}),
+                          [lureMaxKey]: lureKeyToValue(e.target.value),
+                        }))
                       }
-                      onChange={(v) => lureMaxKey && setDraft((d) => ({ ...(d ?? {}), [lureMaxKey]: v }))}
                       disabled={!lureMaxKey}
-                      min={0}
-                      max={32}
-                    />
+                    >
+                      {LURE_OZ_OPTIONS.map((o) => (
+                        <option key={o.label} value={lureValueToKey(o.value)}>
+                          {o.label}
+                        </option>
+                      ))}
+                    </select>
                   </label>
                 </div>
               </div>
@@ -1023,9 +1019,7 @@ export default function RodDetailClient({
           })}
         </div>
 
-        <div className="text-xs text-gray-500">
-          Selected: {techniques.length ? techniques.join(", ") : "none"}
-        </div>
+        <div className="text-xs text-gray-500">Selected: {techniques.length ? techniques.join(", ") : "none"}</div>
       </section>
 
       <section className="border rounded p-4 space-y-4">
