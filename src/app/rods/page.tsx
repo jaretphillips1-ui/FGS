@@ -11,6 +11,8 @@ import { normalizeTechniques, sortTechniques } from "@/lib/rodTechniques";
 type RodRow = {
   id: string;
   name: string;
+  brand?: string | null;
+  model?: string | null;
   status?: string | null;
   created_at?: string | null;
   rod_techniques?: string[] | string | null;
@@ -144,6 +146,16 @@ function StatusBadge({
   );
 }
 
+function formatBrandModel(brand?: string | null, model?: string | null): string | null {
+  const b = String(brand ?? "").trim();
+  const m = String(model ?? "").trim();
+
+  if (b && m) return `${b} • ${m}`;
+  if (b) return b;
+  if (m) return m;
+  return null;
+}
+
 export default function RodLockerPage() {
   const router = useRouter();
 
@@ -208,7 +220,7 @@ export default function RodLockerPage() {
       const queryRes = await hardTimeout(
         supabase
           .from("gear_items")
-          .select("id,name,status,created_at,rod_techniques")
+          .select("id,name,brand,model,status,created_at,rod_techniques")
           .eq("gear_type", "rod")
           .order("created_at", { ascending: false }),
         8000,
@@ -383,60 +395,69 @@ export default function RodLockerPage() {
         {(filteredRows, setTechniqueFilter) => (
           <>
             <ul className="mt-6 space-y-2">
-              {filteredRows.map((r) => (
-                <li
-                  key={r.id}
-                  className="border rounded p-3 cursor-pointer hover:bg-gray-50"
-                  onClick={() => router.push(`/rods/${r.id}`)}
-                >
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="font-medium">{r.name}</div>
+              {filteredRows.map((r) => {
+                const brandModel = formatBrandModel(r.brand, r.model);
 
-                    <StatusBadge
-                      status={r.status}
-                      disabled={!!toggling[r.id]}
-                      onToggle={() => toggleRodStatus(r)}
-                    />
-                  </div>
-
-                  {(() => {
-                    const techs = normalizeTechniques(r.rod_techniques as unknown);
-                    if (techs.length === 0) return null;
-
-                    const primary = String(techs[0] ?? "").trim();
-                    const secondarySorted = sortTechniques(techs).filter((t) => t !== primary);
-                    const display = primary ? [primary, ...secondarySorted] : secondarySorted;
-
-                    if (display.length === 0) return null;
-
-                    return (
-                      <div className="mt-1 flex flex-wrap gap-1">
-                        {display.map((t) => {
-                          const isPrimary = primary && t === primary;
-
-                          const cls = isPrimary
-                            ? "text-xs px-2 py-0.5 rounded bg-green-600 text-white border border-green-700 hover:bg-green-700"
-                            : "text-xs px-2 py-0.5 rounded bg-gray-100 text-gray-700 border hover:bg-gray-200";
-
-                          return (
-                            <button
-                              type="button"
-                              key={t}
-                              className={cls}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setTechniqueFilter(t);
-                              }}
-                            >
-                              {t}
-                            </button>
-                          );
-                        })}
+                return (
+                  <li
+                    key={r.id}
+                    className="border rounded p-3 cursor-pointer hover:bg-gray-50"
+                    onClick={() => router.push(`/rods/${r.id}`)}
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="font-medium truncate">{r.name}</div>
+                        {brandModel ? (
+                          <div className="text-sm text-gray-600 truncate">{brandModel}</div>
+                        ) : null}
                       </div>
-                    );
-                  })()}
-                </li>
-              ))}
+
+                      <StatusBadge
+                        status={r.status}
+                        disabled={!!toggling[r.id]}
+                        onToggle={() => toggleRodStatus(r)}
+                      />
+                    </div>
+
+                    {(() => {
+                      const techs = normalizeTechniques(r.rod_techniques as unknown);
+                      if (techs.length === 0) return null;
+
+                      const primary = String(techs[0] ?? "").trim();
+                      const secondarySorted = sortTechniques(techs).filter((t) => t !== primary);
+                      const display = primary ? [primary, ...secondarySorted] : secondarySorted;
+
+                      if (display.length === 0) return null;
+
+                      return (
+                        <div className="mt-1 flex flex-wrap gap-1">
+                          {display.map((t) => {
+                            const isPrimary = primary && t === primary;
+
+                            const cls = isPrimary
+                              ? "text-xs px-2 py-0.5 rounded bg-green-600 text-white border border-green-700 hover:bg-green-700"
+                              : "text-xs px-2 py-0.5 rounded bg-gray-100 text-gray-700 border hover:bg-gray-200";
+
+                            return (
+                              <button
+                                type="button"
+                                key={t}
+                                className={cls}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setTechniqueFilter(t);
+                                }}
+                              >
+                                {t}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      );
+                    })()}
+                  </li>
+                );
+              })}
             </ul>
 
             {filteredRows.length === 0 && !err && (

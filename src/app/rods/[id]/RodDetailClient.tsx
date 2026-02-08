@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import type { InputHTMLAttributes } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import {
@@ -25,6 +26,13 @@ const UUID_RE =
 // ======================
 type UiStatus = "owned" | "wishlist";
 type DbStatus = "owned" | "planned";
+
+type WaterType = "fresh" | "salt" | "ice";
+const WATER_TYPES: { value: WaterType; label: string }[] = [
+  { value: "fresh", label: "Fresh water" },
+  { value: "salt", label: "Salt water" },
+  { value: "ice", label: "Ice" },
+];
 
 function errMsg(e: unknown, fallback: string) {
   if (e instanceof Error) return e.message || fallback;
@@ -106,6 +114,15 @@ const HIDE_KEYS = new Set([
   "technique",
   "rod_technique",
   "techniques_json",
+
+  // We render these in nicer dedicated sections:
+  "saltwater_ok",
+  "water_type",
+  "rod_water_type",
+  "rod_line_min_lb",
+  "rod_line_max_lb",
+  "rod_lure_min_oz",
+  "rod_lure_max_oz",
 ]);
 
 function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
@@ -156,6 +173,106 @@ function formatFeetInches(totalInches: number | null) {
   return { ft, inch, total: t };
 }
 
+function numOrNullFromInput(raw: string): number | null {
+  const s = String(raw ?? "").trim();
+  if (!s) return null;
+  const n = Number(s);
+  return Number.isFinite(n) ? n : null;
+}
+
+function clampNum(n: number, min: number, max: number) {
+  if (!Number.isFinite(n)) return min;
+  return Math.max(min, Math.min(max, n));
+}
+
+function normalizeWaterType(v: unknown): WaterType {
+  const s = String(v ?? "").trim().toLowerCase();
+  if (s === "salt" || s === "saltwater" || s === "salt water") return "salt";
+  if (s === "ice" || s === "ice fishing") return "ice";
+  return "fresh";
+}
+
+/**
+ * Always-visible steppers: input + a dedicated up/down control on the right.
+ * (So we don't depend on browser hover spinners.)
+ */
+function StepperNumber({
+  value,
+  onChange,
+  min,
+  max,
+  step = 1,
+  disabled,
+  placeholder,
+  inputMode = "numeric",
+}: {
+  value: number | null;
+  onChange: (next: number | null) => void;
+  min: number;
+  max: number;
+  step?: number;
+  disabled?: boolean;
+  placeholder?: string;
+  inputMode?: InputHTMLAttributes<HTMLInputElement>["inputMode"];
+}) {
+  const vStr = value == null || !Number.isFinite(value) ? "" : String(value);
+
+  function commitFromString(s: string) {
+    const n = numOrNullFromInput(s);
+    if (n == null) return onChange(null);
+    const clamped = clampNum(n, min, max);
+    onChange(clamped);
+  }
+
+  function bump(dir: 1 | -1) {
+    const cur = value == null || !Number.isFinite(value) ? 0 : value;
+    const next = clampNum(cur + dir * step, min, max);
+    onChange(next);
+  }
+
+  return (
+    <div
+      className={
+        "flex items-stretch rounded border overflow-hidden bg-white " +
+        (disabled ? "opacity-60" : "")
+      }
+    >
+      <input
+        className="w-full px-3 py-2 text-sm outline-none text-right"
+        type="text"
+        inputMode={inputMode}
+        value={vStr}
+        onChange={(e) => commitFromString(e.target.value)}
+        placeholder={placeholder}
+        disabled={disabled}
+      />
+      <div className="flex flex-col border-l">
+        <button
+          type="button"
+          className="px-2 h-full text-xs leading-none hover:bg-gray-100 disabled:opacity-50"
+          onClick={() => bump(1)}
+          disabled={disabled}
+          aria-label="Increase"
+          title="Increase"
+        >
+          ▲
+        </button>
+        <div className="h-px bg-gray-200" />
+        <button
+          type="button"
+          className="px-2 h-full text-xs leading-none hover:bg-gray-100 disabled:opacity-50"
+          onClick={() => bump(-1)}
+          disabled={disabled}
+          aria-label="Decrease"
+          title="Decrease"
+        >
+          ▼
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function RodDetailClient({
   id,
   initial,
@@ -181,8 +298,8 @@ export default function RodDetailClient({
   const primaryTechnique = techniques[0] ?? "";
 
   // Local-only length editor state (feet+inches) -> saved into total inches column
-  const [lenFeet, setLenFeet] = useState(7);
-  const [lenInches, setLenInches] = useState(0);
+  const [lenFeet, setLenFeet] = useState<number | null>(7);
+  const [lenInches, setLenInches] = useState<number | null>(0);
 
   const loadSeq = useRef(0);
 
@@ -211,6 +328,16 @@ export default function RodDetailClient({
     () => pickFirstExistingKey(original, ["rod_storage_note", "storage_note"]),
     [original]
   );
+
+  const waterTypeKey = useMemo(
+    () => pickFirstExistingKey(original, ["water_type", "rod_water_type"]) ?? null,
+    [original]
+  );
+
+  const lineMinKey = useMemo(() => pickFirstExistingKey(original, ["rod_line_min_lb"]), [original]);
+  const lineMaxKey = useMemo(() => pickFirstExistingKey(original, ["rod_line_max_lb"]), [original]);
+  const lureMinKey = useMemo(() => pickFirstExistingKey(original, ["rod_lure_min_oz"]), [original]);
+  const lureMaxKey = useMemo(() => pickFirstExistingKey(original, ["rod_lure_max_oz"]), [original]);
 
   const editableKeys = useMemo(() => {
     if (!original) return [];
@@ -282,7 +409,7 @@ export default function RodDetailClient({
     if (lengthKey) {
       const base = clampInt(Number(original[lengthKey] ?? 0), 0, 5000);
       const curTotal =
-        clampInt(Number(lenFeet), 0, 20) * 12 + clampInt(Number(lenInches), 0, 11);
+        clampInt(Number(lenFeet ?? 0), 0, 20) * 12 + clampInt(Number(lenInches ?? 0), 0, 11);
       if (base !== curTotal) return true;
     }
 
@@ -429,7 +556,7 @@ export default function RodDetailClient({
 
       if (lengthKey) {
         const curTotal =
-          clampInt(Number(lenFeet), 0, 20) * 12 + clampInt(Number(lenInches), 0, 11);
+          clampInt(Number(lenFeet ?? 0), 0, 20) * 12 + clampInt(Number(lenInches ?? 0), 0, 11);
         const base = clampInt(Number(original[lengthKey] ?? 0), 0, 5000);
         if (curTotal !== base) patch[lengthKey] = curTotal;
       }
@@ -445,11 +572,7 @@ export default function RodDetailClient({
       }
 
       const res = await withTimeout(
-        supabase
-          .from(TABLE)
-          .update(patch)
-          .eq("id", id)
-          .eq("owner_id", user.id),
+        supabase.from(TABLE).update(patch).eq("id", id).eq("owner_id", user.id),
         8000,
         "gear_items update"
       );
@@ -477,17 +600,28 @@ export default function RodDetailClient({
     [
       "name",
       "status",
-      "saltwater_ok",
       lengthKey ?? "",
       piecesKey ?? "",
       powerKey ?? "",
       actionKey ?? "",
       notesKey ?? "",
       storageKey ?? "",
+      waterTypeKey ?? "",
+      "saltwater_ok",
+      lineMinKey ?? "",
+      lineMaxKey ?? "",
+      lureMinKey ?? "",
+      lureMaxKey ?? "",
     ].filter(Boolean)
   );
 
   const otherKeys = editableKeys.filter((k) => !renderedKeys.has(k));
+
+  const currentWaterType: WaterType = waterTypeKey
+    ? normalizeWaterType((draft as AnyRecord)[waterTypeKey])
+    : !!(draft as AnyRecord).saltwater_ok
+    ? "salt"
+    : "fresh";
 
   return (
     <main className="max-w-3xl mx-auto p-6 space-y-4">
@@ -546,7 +680,7 @@ export default function RodDetailClient({
           />
         </label>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           {"status" in draft && (
             <label className="grid gap-1">
               <div className="text-sm font-medium">Status</div>
@@ -567,18 +701,39 @@ export default function RodDetailClient({
             </label>
           )}
 
-          {"saltwater_ok" in draft && (
-            <label className="flex items-center gap-3 border rounded px-3 py-2">
-              <input
-                type="checkbox"
-                checked={!!(draft as AnyRecord).saltwater_ok}
-                onChange={(e) =>
-                  setDraft((d) => ({ ...(d ?? {}), saltwater_ok: e.target.checked }))
-                }
-              />
-              <span className="text-sm font-medium">Saltwater OK</span>
-            </label>
-          )}
+          <label className="grid gap-1 sm:col-span-2">
+            <div className="text-sm font-medium">Water type</div>
+            <select
+              className="border rounded px-3 py-2"
+              value={currentWaterType}
+              onChange={(e) => {
+                const next = normalizeWaterType(e.target.value);
+                setDraft((d) => {
+                  const cur = { ...(d ?? {}) } as AnyRecord;
+
+                  if (waterTypeKey) {
+                    cur[waterTypeKey] = next;
+                  } else {
+                    // Fallback for older rows: map to boolean
+                    cur.saltwater_ok = next === "salt";
+                  }
+
+                  return cur;
+                });
+              }}
+            >
+              {WATER_TYPES.map((w) => (
+                <option key={w.value} value={w.value}>
+                  {w.label}
+                </option>
+              ))}
+            </select>
+            {!waterTypeKey && (
+              <div className="text-xs text-gray-500">
+                Stored as Saltwater OK (legacy). We can migrate to a proper water_type column later if you want.
+              </div>
+            )}
+          </label>
         </div>
       </section>
 
@@ -588,37 +743,35 @@ export default function RodDetailClient({
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <label className="grid gap-1">
             <div className="text-sm font-medium">Length (ft)</div>
-            <input
-              className="border rounded px-3 py-2"
-              type="number"
+            <StepperNumber
+              value={lenFeet}
+              onChange={(v) => setLenFeet(v == null ? 0 : clampInt(v, 0, 20))}
               min={0}
               max={20}
-              value={lenFeet}
-              onChange={(e) => setLenFeet(Number(e.target.value))}
+              step={1}
               disabled={!lengthKey}
+              placeholder="0"
             />
-            {!lengthKey && (
-              <div className="text-xs text-gray-500">Not saved (no length column)</div>
-            )}
+            {!lengthKey && <div className="text-xs text-gray-500">Not saved (no length column)</div>}
           </label>
 
           <label className="grid gap-1">
             <div className="text-sm font-medium">Length (in)</div>
-            <input
-              className="border rounded px-3 py-2"
-              type="number"
+            <StepperNumber
+              value={lenInches}
+              onChange={(v) => setLenInches(v == null ? 0 : clampInt(v, 0, 11))}
               min={0}
               max={11}
-              value={lenInches}
-              onChange={(e) => setLenInches(Number(e.target.value))}
+              step={1}
               disabled={!lengthKey}
+              placeholder="0"
             />
           </label>
 
           <div className="grid gap-1">
             <div className="text-sm font-medium">Preview</div>
             <div className="border rounded px-3 py-2 text-sm text-gray-700">
-              {clampInt(Number(lenFeet), 0, 20)}&apos; {clampInt(Number(lenInches), 0, 11)}&quot;
+              {clampInt(Number(lenFeet ?? 0), 0, 20)}&apos; {clampInt(Number(lenInches ?? 0), 0, 11)}&quot;
               {lengthKey ? "" : <span className="text-gray-500"> — not saved</span>}
             </div>
           </div>
@@ -627,23 +780,20 @@ export default function RodDetailClient({
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <label className="grid gap-1">
             <div className="text-sm font-medium">Pieces</div>
-            <input
-              className="border rounded px-3 py-2"
-              type="number"
+            <StepperNumber
+              value={piecesKey ? (Number((draft as AnyRecord)[piecesKey] ?? 1) as number) : 1}
+              onChange={(v) => {
+                if (!piecesKey) return;
+                const safe = v == null ? 1 : clampInt(v, 1, 10);
+                setDraft((d) => ({ ...(d ?? {}), [piecesKey]: safe }));
+              }}
               min={1}
               max={10}
-              value={piecesKey ? Number((draft as AnyRecord)[piecesKey] ?? 1) : 1}
-              onChange={(e) => {
-                if (!piecesKey) return;
-                const v = parseInt(e.target.value, 10);
-                const safe = Number.isFinite(v) ? v : 1;
-                setDraft((d) => ({ ...(d ?? {}), [piecesKey]: clampInt(safe, 1, 10) }));
-              }}
+              step={1}
               disabled={!piecesKey}
+              placeholder="1"
             />
-            {!piecesKey && (
-              <div className="text-xs text-gray-500">Not saved (no pieces column)</div>
-            )}
+            {!piecesKey && <div className="text-xs text-gray-500">Not saved (no pieces column)</div>}
           </label>
 
           <label className="grid gap-1">
@@ -651,15 +801,11 @@ export default function RodDetailClient({
             <input
               className="border rounded px-3 py-2"
               value={powerKey ? String((draft as AnyRecord)[powerKey] ?? "") : ""}
-              onChange={(e) =>
-                powerKey && setDraft((d) => ({ ...(d ?? {}), [powerKey]: e.target.value }))
-              }
+              onChange={(e) => powerKey && setDraft((d) => ({ ...(d ?? {}), [powerKey]: e.target.value }))}
               disabled={!powerKey}
               placeholder="e.g., MH"
             />
-            {!powerKey && (
-              <div className="text-xs text-gray-500">Not saved (no power column)</div>
-            )}
+            {!powerKey && <div className="text-xs text-gray-500">Not saved (no power column)</div>}
           </label>
 
           <label className="grid gap-1">
@@ -667,17 +813,83 @@ export default function RodDetailClient({
             <input
               className="border rounded px-3 py-2"
               value={actionKey ? String((draft as AnyRecord)[actionKey] ?? "") : ""}
-              onChange={(e) =>
-                actionKey && setDraft((d) => ({ ...(d ?? {}), [actionKey]: e.target.value }))
-              }
+              onChange={(e) => actionKey && setDraft((d) => ({ ...(d ?? {}), [actionKey]: e.target.value }))}
               disabled={!actionKey}
               placeholder="e.g., Fast"
             />
-            {!actionKey && (
-              <div className="text-xs text-gray-500">Not saved (no action column)</div>
-            )}
+            {!actionKey && <div className="text-xs text-gray-500">Not saved (no action column)</div>}
           </label>
         </div>
+
+        {(lineMinKey || lineMaxKey || lureMinKey || lureMaxKey) && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {(lineMinKey || lineMaxKey) && (
+              <div className="grid gap-2">
+                <div className="text-sm font-medium">Line Rating (lb)</div>
+                <div className="grid grid-cols-2 gap-2">
+                  <label className="grid gap-1">
+                    <div className="text-xs text-gray-600">Min</div>
+                    <StepperNumber
+                      value={lineMinKey ? (Number((draft as AnyRecord)[lineMinKey] ?? NaN) as number) : null}
+                      onChange={(v) => lineMinKey && setDraft((d) => ({ ...(d ?? {}), [lineMinKey]: v }))}
+                      min={0}
+                      max={200}
+                      step={1}
+                      disabled={!lineMinKey}
+                      placeholder="Min"
+                    />
+                  </label>
+                  <label className="grid gap-1">
+                    <div className="text-xs text-gray-600">Max</div>
+                    <StepperNumber
+                      value={lineMaxKey ? (Number((draft as AnyRecord)[lineMaxKey] ?? NaN) as number) : null}
+                      onChange={(v) => lineMaxKey && setDraft((d) => ({ ...(d ?? {}), [lineMaxKey]: v }))}
+                      min={0}
+                      max={200}
+                      step={1}
+                      disabled={!lineMaxKey}
+                      placeholder="Max"
+                    />
+                  </label>
+                </div>
+              </div>
+            )}
+
+            {(lureMinKey || lureMaxKey) && (
+              <div className="grid gap-2">
+                <div className="text-sm font-medium">Lure Rating (oz)</div>
+                <div className="grid grid-cols-2 gap-2">
+                  <label className="grid gap-1">
+                    <div className="text-xs text-gray-600">Min</div>
+                    <StepperNumber
+                      value={lureMinKey ? (Number((draft as AnyRecord)[lureMinKey] ?? NaN) as number) : null}
+                      onChange={(v) => lureMinKey && setDraft((d) => ({ ...(d ?? {}), [lureMinKey]: v }))}
+                      min={0}
+                      max={32}
+                      step={0.0625}
+                      disabled={!lureMinKey}
+                      placeholder="Min"
+                      inputMode="decimal"
+                    />
+                  </label>
+                  <label className="grid gap-1">
+                    <div className="text-xs text-gray-600">Max</div>
+                    <StepperNumber
+                      value={lureMaxKey ? (Number((draft as AnyRecord)[lureMaxKey] ?? NaN) as number) : null}
+                      onChange={(v) => lureMaxKey && setDraft((d) => ({ ...(d ?? {}), [lureMaxKey]: v }))}
+                      min={0}
+                      max={32}
+                      step={0.0625}
+                      disabled={!lureMaxKey}
+                      placeholder="Max"
+                      inputMode="decimal"
+                    />
+                  </label>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </section>
 
       <section className="border rounded p-4 space-y-3">
@@ -735,9 +947,7 @@ export default function RodDetailClient({
           <textarea
             className="border rounded px-3 py-2 min-h-[90px]"
             value={notesKey ? String((draft as AnyRecord)[notesKey] ?? "") : ""}
-            onChange={(e) =>
-              notesKey && setDraft((d) => ({ ...(d ?? {}), [notesKey]: e.target.value }))
-            }
+            onChange={(e) => notesKey && setDraft((d) => ({ ...(d ?? {}), [notesKey]: e.target.value }))}
             disabled={!notesKey}
           />
           {!notesKey && <div className="text-xs text-gray-500">Not saved (no notes column)</div>}
@@ -748,15 +958,11 @@ export default function RodDetailClient({
           <input
             className="border rounded px-3 py-2"
             value={storageKey ? String((draft as AnyRecord)[storageKey] ?? "") : ""}
-            onChange={(e) =>
-              storageKey && setDraft((d) => ({ ...(d ?? {}), [storageKey]: e.target.value }))
-            }
+            onChange={(e) => storageKey && setDraft((d) => ({ ...(d ?? {}), [storageKey]: e.target.value }))}
             disabled={!storageKey}
             placeholder="Where it lives (rack, locker, tube, etc.)"
           />
-          {!storageKey && (
-            <div className="text-xs text-gray-500">Not saved (no storage column)</div>
-          )}
+          {!storageKey && <div className="text-xs text-gray-500">Not saved (no storage column)</div>}
         </label>
       </section>
 

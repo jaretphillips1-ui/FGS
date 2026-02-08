@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
@@ -15,10 +15,17 @@ const ACTION_OPTIONS = ["—", "Slow", "Mod", "Mod-Fast", "Fast", "X-Fast"] as c
 const STATUS_OPTIONS = ["owned", "wishlist"] as const;
 type StatusOption = (typeof STATUS_OPTIONS)[number];
 
+// Water type (dropdown)
+const WATER_OPTIONS = ["fresh", "salt", "ice"] as const;
+type WaterOption = (typeof WATER_OPTIONS)[number];
+
 type FormState = {
-  name: string;
+  name: string; // optional now (auto-built if blank)
+  brand: string;
+  model: string;
+
   status: StatusOption;
-  saltwater_ok: boolean;
+  water_type: WaterOption;
 
   notes: string;
   storage_note: string;
@@ -41,6 +48,14 @@ type FormState = {
   rod_guides_text: string;
 
   techniques: string[];
+};
+
+type SuggestionRow = {
+  brand: string | null;
+  model: string | null;
+  rod_blank_text: string | null;
+  rod_guides_text: string | null;
+  rod_handle_text: string | null;
 };
 
 function errMsg(e: unknown): string {
@@ -88,6 +103,49 @@ function statusLabel(s: StatusOption): string {
   return s === "owned" ? "Owned" : "Wish list";
 }
 
+function waterLabel(w: WaterOption): string {
+  if (w === "fresh") return "Fresh water";
+  if (w === "salt") return "Salt water";
+  return "Ice";
+}
+
+function formatLengthFromTotalInches(total: number | null): string {
+  if (total == null) return "";
+  const f = Math.floor(total / 12);
+  const i = Math.round((total - f * 12) * 2) / 2;
+  return `${f}' ${i}"`;
+}
+
+function buildRodName(form: FormState): string {
+  const brand = form.brand.trim();
+  const model = form.model.trim();
+  const length = formatLengthFromTotalInches(form.rod_length_in);
+  const power = (form.rod_power ?? "").trim();
+  const action = (form.rod_action ?? "").trim();
+
+  const parts: string[] = [];
+
+  const brandModel = [brand, model].filter(Boolean).join(" ");
+  if (brandModel) parts.push(brandModel);
+
+  if (length) parts.push(length);
+
+  if (power && power !== "—") parts.push(power);
+  if (action && action !== "—") parts.push(action);
+
+  return parts.join(" ").replace(/\s+/g, " ").trim();
+}
+
+function uniqSorted(values: Array<string | null | undefined>): string[] {
+  const set = new Set<string>();
+  for (const v of values) {
+    const s = String(v ?? "").trim();
+    if (!s) continue;
+    set.add(s);
+  }
+  return Array.from(set).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
+}
+
 export default function NewRodPage() {
   const router = useRouter();
   const [saving, setSaving] = useState(false);
@@ -96,10 +154,19 @@ export default function NewRodPage() {
   const [lenFeet, setLenFeet] = useState("");
   const [lenInches, setLenInches] = useState("");
 
+  const [brandOptions, setBrandOptions] = useState<string[]>([]);
+  const [modelOptions, setModelOptions] = useState<string[]>([]);
+  const [blankOptions, setBlankOptions] = useState<string[]>([]);
+  const [guidesOptions, setGuidesOptions] = useState<string[]>([]);
+  const [handleOptions, setHandleOptions] = useState<string[]>([]);
+
   const [form, setForm] = useState<FormState>({
     name: "",
+    brand: "",
+    model: "",
+
     status: "owned",
-    saltwater_ok: false,
+    water_type: "fresh",
 
     notes: "",
     storage_note: "",
@@ -123,13 +190,57 @@ export default function NewRodPage() {
     techniques: [],
   });
 
+  // Pull suggestion values from your existing rods (simple + safe for now)
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadSuggestions() {
+      try {
+        const sessionRes = await supabase.auth.getSession();
+        const user = sessionRes.data.session?.user;
+        if (!user) return;
+
+        const { data, error } = await supabase
+          .from("gear_items")
+          .select("brand,model,rod_blank_text,rod_guides_text,rod_handle_text")
+          .eq("gear_type", "rod")
+          .eq("owner_id", user.id)
+          .order("created_at", { ascending: false })
+          .limit(500);
+
+        if (error) return;
+
+        const rows = (data ?? []) as SuggestionRow[];
+
+        if (cancelled) return;
+
+        setBrandOptions(uniqSorted(rows.map((r) => r.brand)));
+        setModelOptions(uniqSorted(rows.map((r) => r.model)));
+        setBlankOptions(uniqSorted(rows.map((r) => r.rod_blank_text)));
+        setGuidesOptions(uniqSorted(rows.map((r) => r.rod_guides_text)));
+        setHandleOptions(uniqSorted(rows.map((r) => r.rod_handle_text)));
+      } catch {
+        // Suggestions are optional; ignore failures silently.
+      }
+    }
+
+    loadSuggestions();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const builtNamePreview = useMemo(() => buildRodName(form), [form]);
+
   const isDirty = useMemo(() => {
     return (
       form.name.trim() !== "" ||
+      form.brand.trim() !== "" ||
+      form.model.trim() !== "" ||
+      form.status !== "owned" ||
+      form.water_type !== "fresh" ||
       form.notes.trim() !== "" ||
       form.storage_note.trim() !== "" ||
-      form.saltwater_ok ||
-      form.status !== "owned" ||
       form.rod_length_in != null ||
       form.rod_pieces != null ||
       (form.rod_power && form.rod_power !== "—") ||
@@ -148,7 +259,6 @@ export default function NewRodPage() {
   function setLength(nextFeet: string, nextInches: string) {
     const total = makeTotalInches(nextFeet, nextInches);
 
-    // If user clears both boxes, keep them cleared and null out length
     if (total == null) {
       setLenFeet(nextFeet);
       setLenInches(nextInches);
@@ -156,9 +266,8 @@ export default function NewRodPage() {
       return;
     }
 
-    // Normalize display so inches never stays > 11.5
     const f = Math.floor(total / 12);
-    const i = Math.round((total - f * 12) * 2) / 2; // half-inch steps
+    const i = Math.round((total - f * 12) * 2) / 2;
 
     setLenFeet(String(f));
     setLenInches(String(i));
@@ -174,7 +283,12 @@ export default function NewRodPage() {
   }
 
   function validate(): string | null {
-    if (!form.name.trim()) return "Name is required.";
+    const typedName = form.name.trim();
+    const built = buildRodName(form);
+
+    if (!typedName && !built) {
+      return "Enter Brand/Model/Length/Power/Action (or type a Name) so the rod name can be built.";
+    }
 
     if (
       form.rod_line_min_lb != null &&
@@ -208,12 +322,20 @@ export default function NewRodPage() {
       const user = sessionRes.data.session?.user;
       if (!user) throw new Error("Not signed in.");
 
+      const finalName = form.name.trim() || buildRodName(form);
+
       const payload: Record<string, unknown> = {
         owner_id: user.id,
         gear_type: "rod",
-        name: form.name.trim(),
-        status: form.status, // "owned" | "wishlist"
-        saltwater_ok: form.saltwater_ok,
+
+        name: finalName,
+        brand: form.brand.trim() || null,
+        model: form.model.trim() || null,
+
+        status: form.status,
+
+        water_type: form.water_type,
+        saltwater_ok: form.water_type === "salt",
 
         notes: form.notes.trim() || null,
         storage_note: form.storage_note.trim() || null,
@@ -305,14 +427,51 @@ export default function NewRodPage() {
       <section className="rounded border p-4 space-y-4">
         <div className="grid gap-3">
           <label className="grid gap-1">
-            <span className="text-sm text-gray-600">Name</span>
+            <span className="text-sm text-gray-600">Name (optional — auto-built if blank)</span>
             <input
               className="border rounded px-3 py-2"
               value={form.name}
               onChange={(e) => setForm((s) => ({ ...s, name: e.target.value }))}
-              placeholder='e.g., 7&apos;2&quot; Heavy Fast'
+              placeholder="Leave blank to auto-build from specs"
             />
+            {form.name.trim() === "" && builtNamePreview ? (
+              <div className="text-xs text-gray-500">Built name preview: {builtNamePreview}</div>
+            ) : null}
           </label>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <label className="grid gap-1">
+              <span className="text-sm text-gray-600">Brand</span>
+              <input
+                className="border rounded px-3 py-2"
+                value={form.brand}
+                onChange={(e) => setForm((s) => ({ ...s, brand: e.target.value }))}
+                placeholder="e.g., Shimano"
+                list="brand-suggestions"
+              />
+              <datalist id="brand-suggestions">
+                {brandOptions.map((v) => (
+                  <option key={v} value={v} />
+                ))}
+              </datalist>
+            </label>
+
+            <label className="grid gap-1">
+              <span className="text-sm text-gray-600">Model</span>
+              <input
+                className="border rounded px-3 py-2"
+                value={form.model}
+                onChange={(e) => setForm((s) => ({ ...s, model: e.target.value }))}
+                placeholder="e.g., Expride B"
+                list="model-suggestions"
+              />
+              <datalist id="model-suggestions">
+                {modelOptions.map((v) => (
+                  <option key={v} value={v} />
+                ))}
+              </datalist>
+            </label>
+          </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <label className="grid gap-1">
@@ -330,13 +489,21 @@ export default function NewRodPage() {
               </select>
             </label>
 
-            <label className="flex items-center gap-2 mt-6 md:mt-7">
-              <input
-                type="checkbox"
-                checked={form.saltwater_ok}
-                onChange={(e) => setForm((s) => ({ ...s, saltwater_ok: e.target.checked }))}
-              />
-              <span className="text-sm text-gray-700">Saltwater OK</span>
+            <label className="grid gap-1">
+              <span className="text-sm text-gray-600">Water type</span>
+              <select
+                className="border rounded px-3 py-2"
+                value={form.water_type}
+                onChange={(e) =>
+                  setForm((s) => ({ ...s, water_type: e.target.value as WaterOption }))
+                }
+              >
+                {WATER_OPTIONS.map((w) => (
+                  <option key={w} value={w}>
+                    {waterLabel(w)}
+                  </option>
+                ))}
+              </select>
             </label>
           </div>
 
@@ -538,7 +705,13 @@ export default function NewRodPage() {
                 value={form.rod_handle_text}
                 onChange={(e) => setForm((s) => ({ ...s, rod_handle_text: e.target.value }))}
                 placeholder="e.g., split grip cork"
+                list="handle-suggestions"
               />
+              <datalist id="handle-suggestions">
+                {handleOptions.map((v) => (
+                  <option key={v} value={v} />
+                ))}
+              </datalist>
             </label>
 
             <label className="grid gap-1">
@@ -547,8 +720,14 @@ export default function NewRodPage() {
                 className="border rounded px-3 py-2"
                 value={form.rod_blank_text}
                 onChange={(e) => setForm((s) => ({ ...s, rod_blank_text: e.target.value }))}
-                placeholder="e.g., SCV graphite"
+                placeholder="e.g., SVC Graphite"
+                list="blank-suggestions"
               />
+              <datalist id="blank-suggestions">
+                {blankOptions.map((v) => (
+                  <option key={v} value={v} />
+                ))}
+              </datalist>
             </label>
 
             <label className="grid gap-1">
@@ -558,7 +737,13 @@ export default function NewRodPage() {
                 value={form.rod_guides_text}
                 onChange={(e) => setForm((s) => ({ ...s, rod_guides_text: e.target.value }))}
                 placeholder="e.g., Fuji K"
+                list="guides-suggestions"
               />
+              <datalist id="guides-suggestions">
+                {guidesOptions.map((v) => (
+                  <option key={v} value={v} />
+                ))}
+              </datalist>
             </label>
           </div>
         </div>
