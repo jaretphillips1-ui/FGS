@@ -1,13 +1,16 @@
 # FGS — START HERE (One True SOP)
 
-This file is the single source of truth for starting, resuming, saving,
+This file is the **single source of truth** for starting, resuming, saving,
 verifying, and shutting down the Fishing Gear System (FGS).
 
 If anything conflicts with this file, **this file wins**.
 
+This SOP is intentionally strict. That strictness is what keeps FGS
+recoverable, professional, and drift-free.
+
 ---
 
-## Canonical locations
+## Canonical locations (NON-NEGOTIABLE)
 
 **Repo root**
 C:\Users\lsphi\OneDrive\AI_Workspace\FGS\fgs-app
@@ -15,14 +18,19 @@ C:\Users\lsphi\OneDrive\AI_Workspace\FGS\fgs-app
 **ONE TRUE SAVE location**
 C:\Users\lsphi\OneDrive\AI_Workspace\_SAVES\FGS\LATEST
 
-**Desktop mirror (ONLY mirror allowed)**
+This folder is the canonical source of all saved state.
+
+**Desktop mirror (ONLY allowed mirror)**
 C:\Users\lsphi\OneDrive\Desktop\FGS
 
-Expected contents of Desktop\FGS:
-- FGS_LATEST.zip
-- FGS_LATEST_CHECKPOINT.txt
+Expected contents of `Desktop\FGS`:
+- `FGS_LATEST.zip`
+- `FGS_LATEST_CHECKPOINT.txt`
 
 No other Desktop mirrors are allowed.
+
+Root-level Desktop ZIPs (e.g. `Desktop\FGS_LATEST.zip`) are considered
+**legacy clutter** and should be removed if found.
 
 ---
 
@@ -30,18 +38,18 @@ No other Desktop mirrors are allowed.
 
 Open a **fresh PowerShell 7.5.4** window and run:
 
-1) Set-Location "$env:OneDrive\AI_Workspace\FGS\fgs-app"
-2) git status
-3) git log -1 --oneline
+1) `Set-Location "$env:OneDrive\AI_Workspace\FGS\fgs-app"`
+2) `git status`
+3) `git log -1 --oneline`
 
-If:
-- working tree is clean
-- HEAD commit is expected
+Proceed only if:
+- the working tree is clean
+- the HEAD commit is expected
 
-➡ Start the dev server using the Desktop shortcut:
+➡ Start the dev server using the Desktop shortcut:  
 **FGS GO**
 
-Notes:
+### Notes
 - Keep the dev-server PowerShell window open while using the app.
 - For edits or log capture while the dev server runs, open a **separate**
   fresh PowerShell window.
@@ -49,16 +57,18 @@ Notes:
 
 ---
 
-## Save FGS / “Save FGS here” (canonical trigger)
+## Save FGS — Canonical Trigger (NON-NEGOTIABLE)
 
 Any phrasing like:
 - “save FGS”
 - “save here”
 - “lock this in”
 
-means: **run the ONE TRUE Save + Verify + Shutdown flow**.
+means:
 
-Use the Desktop shortcut:
+**Run the ONE TRUE Save + Verify + Shutdown flow.**
+
+Use the Desktop shortcut:  
 **FGS - SAVE + SHUTDOWN**
 
 This flow will:
@@ -71,7 +81,7 @@ This flow will:
 - Perform final drift verification
 
 If this step fails:
-- Do not continue working
+- **Do not continue working**
 - Fix the reported issue first
 
 ---
@@ -81,14 +91,15 @@ If this step fails:
 FGS has **four layers of drift protection**:
 
 ### 1) Manual (human)
-- This file (FGS_START_HERE.md)
-- You following the Resume / Save procedures
+- This file (`FGS_START_HERE.md`)
+- You following the Resume / Save procedures exactly
 
 ### 2) Local scripted
-- scripts\fgs-verify.ps1
-- scripts\fgs-save-shutdown.ps1
-- scripts\fgs-backup.ps1
+- `scripts\fgs-backup.ps1` — canonical ZIP creation + retention
+- `scripts\fgs-verify.ps1` — repo + runtime integrity
+- `scripts\fgs-verify-mirror.ps1` — ZIP + mirror hash integrity
+- `scripts\fgs-save-shutdown.ps1` — orchestrated end-of-session flow
 
-You can manually run:
+You may manually run:
 ```powershell
 .\scripts\fgs-verify.ps1
