@@ -19,6 +19,47 @@ type StatusOption = (typeof STATUS_OPTIONS)[number];
 const WATER_OPTIONS = ["fresh", "salt", "ice"] as const;
 type WaterOption = (typeof WATER_OPTIONS)[number];
 
+type LureOption = { label: string; value: number | null };
+const LURE_OZ_OPTIONS: readonly LureOption[] = [
+  { label: "—", value: null },
+
+  { label: "1/32", value: 1 / 32 },
+  { label: "1/16", value: 1 / 16 },
+  { label: "3/32", value: 3 / 32 },
+  { label: "1/8", value: 1 / 8 },
+  { label: "3/16", value: 3 / 16 },
+  { label: "1/4", value: 1 / 4 },
+  { label: "5/16", value: 5 / 16 },
+  { label: "3/8", value: 3 / 8 },
+  { label: "7/16", value: 7 / 16 },
+  { label: "1/2", value: 1 / 2 },
+  { label: "5/8", value: 5 / 8 },
+  { label: "3/4", value: 3 / 4 },
+  { label: "7/8", value: 7 / 8 },
+
+  { label: "1", value: 1 },
+  { label: "1 1/8", value: 1 + 1 / 8 },
+  { label: "1 1/4", value: 1 + 1 / 4 },
+  { label: "1 3/8", value: 1 + 3 / 8 },
+  { label: "1 1/2", value: 1 + 1 / 2 },
+  { label: "1 5/8", value: 1 + 5 / 8 },
+  { label: "1 3/4", value: 1 + 3 / 4 },
+  { label: "2", value: 2 },
+  { label: "2 1/2", value: 2 + 1 / 2 },
+  { label: "3", value: 3 },
+] as const;
+
+function lureValueToKey(v: number | null): string {
+  // stable string key for <select> value
+  return v == null ? "" : String(v);
+}
+
+function lureKeyToValue(k: string): number | null {
+  if (!k) return null;
+  const n = Number(k);
+  return Number.isFinite(n) ? n : null;
+}
+
 type FormState = {
   name: string; // optional now (auto-built if blank)
   brand: string;
@@ -357,11 +398,7 @@ export default function NewRodPage() {
         rod_guides_text: form.rod_guides_text.trim() || null,
       };
 
-      const { data, error } = await supabase
-        .from("gear_items")
-        .insert(payload)
-        .select("id")
-        .maybeSingle();
+      const { data, error } = await supabase.from("gear_items").insert(payload).select("id").maybeSingle();
 
       if (error) throw error;
       if (!data?.id) throw new Error("Insert succeeded but no id returned.");
@@ -394,18 +431,10 @@ export default function NewRodPage() {
         </Link>
 
         <div className="flex gap-2">
-          <button
-            className="px-3 py-1 rounded border disabled:opacity-50"
-            onClick={onCancel}
-            disabled={saving}
-          >
+          <button className="px-3 py-1 rounded border disabled:opacity-50" onClick={onCancel} disabled={saving}>
             Cancel
           </button>
-          <button
-            className="px-3 py-1 rounded border disabled:opacity-50"
-            onClick={onSave}
-            disabled={saving}
-          >
+          <button className="px-3 py-1 rounded border disabled:opacity-50" onClick={onSave} disabled={saving}>
             {saving ? "Saving…" : "Save"}
           </button>
         </div>
@@ -494,9 +523,7 @@ export default function NewRodPage() {
               <select
                 className="border rounded px-3 py-2"
                 value={form.water_type}
-                onChange={(e) =>
-                  setForm((s) => ({ ...s, water_type: e.target.value as WaterOption }))
-                }
+                onChange={(e) => setForm((s) => ({ ...s, water_type: e.target.value as WaterOption }))}
               >
                 {WATER_OPTIONS.map((w) => (
                   <option key={w} value={w}>
@@ -553,9 +580,7 @@ export default function NewRodPage() {
           })}
         </div>
 
-        <div className="text-xs text-gray-500">
-          Selected: {form.techniques.length ? form.techniques.join(", ") : "none"}
-        </div>
+        <div className="text-xs text-gray-500">Selected: {form.techniques.length ? form.techniques.join(", ") : "none"}</div>
       </section>
 
       {/* Rod Specs */}
@@ -650,9 +675,7 @@ export default function NewRodPage() {
                   className="border rounded px-3 py-2"
                   placeholder="Min"
                   value={form.rod_line_min_lb ?? ""}
-                  onChange={(e) =>
-                    setForm((s) => ({ ...s, rod_line_min_lb: numOrNull(e.target.value) }))
-                  }
+                  onChange={(e) => setForm((s) => ({ ...s, rod_line_min_lb: numOrNull(e.target.value) }))}
                 />
                 <input
                   type="number"
@@ -661,9 +684,7 @@ export default function NewRodPage() {
                   className="border rounded px-3 py-2"
                   placeholder="Max"
                   value={form.rod_line_max_lb ?? ""}
-                  onChange={(e) =>
-                    setForm((s) => ({ ...s, rod_line_max_lb: numOrNull(e.target.value) }))
-                  }
+                  onChange={(e) => setForm((s) => ({ ...s, rod_line_max_lb: numOrNull(e.target.value) }))}
                 />
               </div>
             </div>
@@ -671,28 +692,29 @@ export default function NewRodPage() {
             <div className="grid gap-1">
               <span className="text-sm text-gray-600">Lure Rating (oz)</span>
               <div className="grid grid-cols-2 gap-2">
-                <input
-                  type="number"
-                  min="0"
-                  step="0.0625"
+                <select
                   className="border rounded px-3 py-2"
-                  placeholder="Min"
-                  value={form.rod_lure_min_oz ?? ""}
-                  onChange={(e) =>
-                    setForm((s) => ({ ...s, rod_lure_min_oz: numOrNull(e.target.value) }))
-                  }
-                />
-                <input
-                  type="number"
-                  min="0"
-                  step="0.0625"
+                  value={lureValueToKey(form.rod_lure_min_oz)}
+                  onChange={(e) => setForm((s) => ({ ...s, rod_lure_min_oz: lureKeyToValue(e.target.value) }))}
+                >
+                  {LURE_OZ_OPTIONS.map((o) => (
+                    <option key={o.label} value={lureValueToKey(o.value)}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+
+                <select
                   className="border rounded px-3 py-2"
-                  placeholder="Max"
-                  value={form.rod_lure_max_oz ?? ""}
-                  onChange={(e) =>
-                    setForm((s) => ({ ...s, rod_lure_max_oz: numOrNull(e.target.value) }))
-                  }
-                />
+                  value={lureValueToKey(form.rod_lure_max_oz)}
+                  onChange={(e) => setForm((s) => ({ ...s, rod_lure_max_oz: lureKeyToValue(e.target.value) }))}
+                >
+                  {LURE_OZ_OPTIONS.map((o) => (
+                    <option key={o.label} value={lureValueToKey(o.value)}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
               </div>
             </div>
           </div>
