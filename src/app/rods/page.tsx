@@ -20,6 +20,9 @@ type RodRow = {
 
 type AuthState = "unknown" | "signed_out" | "signed_in";
 
+type StatusFilter = "all" | "owned" | "wishlist";
+type SortKey = "brand" | "name" | "created_desc" | "status_owned_first";
+
 function hardTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
   return Promise.race([
     p,
@@ -156,6 +159,70 @@ function formatBrandModel(brand?: string | null, model?: string | null): string 
   return null;
 }
 
+function toSortText(v: unknown): string {
+  return String(v ?? "").trim().toLowerCase();
+}
+
+function cmpText(a: string, b: string): number {
+  if (a === b) return 0;
+  return a < b ? -1 : 1;
+}
+
+function countByStatus(rows: RodRow[]): { owned: number; wish: number } {
+  let owned = 0;
+  let wish = 0;
+  for (const r of rows) {
+    if (isOwnedStatus(r.status)) owned++;
+    else if (isWishListStatus(r.status)) wish++;
+  }
+  return { owned, wish };
+}
+
+function sortRows(base: RodRow[], sortKey: SortKey): RodRow[] {
+  const sorted = [...base];
+
+  sorted.sort((a, b) => {
+    if (sortKey === "created_desc") {
+      const ad = toSortText(a.created_at);
+      const bd = toSortText(b.created_at);
+      // ISO dates sort lexicographically
+      return cmpText(bd, ad);
+    }
+
+    if (sortKey === "name") {
+      return cmpText(toSortText(a.name), toSortText(b.name));
+    }
+
+    if (sortKey === "status_owned_first") {
+      const ao = isOwnedStatus(a.status) ? 0 : isWishListStatus(a.status) ? 1 : 2;
+      const bo = isOwnedStatus(b.status) ? 0 : isWishListStatus(b.status) ? 1 : 2;
+      if (ao !== bo) return ao - bo;
+
+      // tie-breaker: brand then name
+      const ab = toSortText(a.brand);
+      const bb = toSortText(b.brand);
+      const byBrand = cmpText(ab, bb);
+      if (byBrand !== 0) return byBrand;
+      return cmpText(toSortText(a.name), toSortText(b.name));
+    }
+
+    // default: brand (then model, then name)
+    const ab = toSortText(a.brand);
+    const bb = toSortText(b.brand);
+    const byBrand = cmpText(ab, bb);
+    if (byBrand !== 0) return byBrand;
+
+    const am = toSortText(a.model);
+    const bm = toSortText(b.model);
+    const byModel = cmpText(am, bm);
+    if (byModel !== 0) return byModel;
+
+    return cmpText(toSortText(a.name), toSortText(b.name));
+  });
+
+  return sorted;
+}
+
 export default function RodLockerPage() {
   const router = useRouter();
 
@@ -170,6 +237,10 @@ export default function RodLockerPage() {
 
   // Track which row IDs are currently being toggled (prevents double clicks)
   const [toggling, setToggling] = useState<Record<string, boolean>>({});
+
+  // Display-only controls (client-side filter + sort)
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [sortKey, setSortKey] = useState<SortKey>("brand");
 
   const loadSeq = useRef(0);
 
@@ -360,6 +431,8 @@ export default function RodLockerPage() {
     );
   }
 
+  const counts = countByStatus(rows);
+
   return (
     <main className="p-6">
       <div className="flex items-center justify-between gap-4">
@@ -392,79 +465,146 @@ export default function RodLockerPage() {
       {err && <p className="mt-4 text-sm text-red-600">{err}</p>}
 
       <RodsListClient rows={rows}>
-        {(filteredRows, setTechniqueFilter) => (
-          <>
-            <ul className="mt-6 space-y-2">
-              {filteredRows.map((r) => {
-                const brandModel = formatBrandModel(r.brand, r.model);
+        {(filteredRows, setTechniqueFilter) => {
+          // Display-only filter (status) on top of technique/search filtering
+          const statusFiltered = filteredRows.filter((r) => {
+            if (statusFilter === "all") return true;
+            if (statusFilter === "owned") return isOwnedStatus(r.status);
+            if (statusFilter === "wishlist") return isWishListStatus(r.status);
+            return true;
+          });
 
-                return (
-                  <li
-                    key={r.id}
-                    className="border rounded p-3 cursor-pointer hover:bg-gray-50"
-                    onClick={() => router.push(`/rods/${r.id}`)}
+          // Display-only sort
+          const displayRows = sortRows(statusFiltered, sortKey);
+
+          return (
+            <>
+              <div className="mt-6 flex items-center justify-between gap-3 flex-wrap">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <label className="flex items-center gap-2">
+                    <span className="text-sm text-gray-600">Status</span>
+                    <select
+                      className="border rounded px-2 py-1 text-sm"
+                      value={statusFilter}
+                      onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
+                      aria-label="Filter by status"
+                      title="Filter by status"
+                    >
+                      <option value="all">All</option>
+                      <option value="owned">Owned</option>
+                      <option value="wishlist">Wish list</option>
+                    </select>
+                  </label>
+
+                  <label className="flex items-center gap-2">
+                    <span className="text-sm text-gray-600">Sort</span>
+                    <select
+                      className="border rounded px-2 py-1 text-sm"
+                      value={sortKey}
+                      onChange={(e) => setSortKey(e.target.value as SortKey)}
+                      aria-label="Sort rods"
+                      title="Sort rods"
+                    >
+                      <option value="brand">Brand</option>
+                      <option value="name">Name</option>
+                      <option value="created_desc">Created (newest)</option>
+                      <option value="status_owned_first">Status (Owned first)</option>
+                    </select>
+                  </label>
+
+                  <button
+                    type="button"
+                    className="px-3 py-1.5 rounded border text-sm"
+                    onClick={() => {
+                      setStatusFilter("all");
+                      setSortKey("brand");
+                      // RodsListClient accepts string; pass "" to clear without hooks/type hacks
+                      setTechniqueFilter("");
+                    }}
+                    title="Reset list controls"
                   >
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="font-medium truncate">{r.name}</div>
-                        {brandModel ? (
-                          <div className="text-sm text-gray-600 truncate">{brandModel}</div>
-                        ) : null}
+                    Clear
+                  </button>
+                </div>
+
+                <div className="text-sm text-gray-600">
+                  {displayRows.length} / {rows.length} • Owned: {counts.owned} • Wish list:{" "}
+                  {counts.wish}
+                </div>
+              </div>
+
+              <ul className="mt-3 space-y-2">
+                {displayRows.map((r) => {
+                  const brandModel = formatBrandModel(r.brand, r.model);
+
+                  return (
+                    <li
+                      key={r.id}
+                      className="border rounded p-3 cursor-pointer hover:bg-gray-50"
+                      onClick={() => router.push(`/rods/${r.id}`)}
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="font-medium truncate">{r.name}</div>
+                          {brandModel ? (
+                            <div className="text-sm text-gray-600 truncate">{brandModel}</div>
+                          ) : null}
+                        </div>
+
+                        <StatusBadge
+                          status={r.status}
+                          disabled={!!toggling[r.id]}
+                          onToggle={() => toggleRodStatus(r)}
+                        />
                       </div>
 
-                      <StatusBadge
-                        status={r.status}
-                        disabled={!!toggling[r.id]}
-                        onToggle={() => toggleRodStatus(r)}
-                      />
-                    </div>
+                      {(() => {
+                        const techs = normalizeTechniques(r.rod_techniques as unknown);
+                        if (techs.length === 0) return null;
 
-                    {(() => {
-                      const techs = normalizeTechniques(r.rod_techniques as unknown);
-                      if (techs.length === 0) return null;
+                        const primary = String(techs[0] ?? "").trim();
+                        const secondarySorted = sortTechniques(techs).filter((t) => t !== primary);
+                        const display = primary ? [primary, ...secondarySorted] : secondarySorted;
 
-                      const primary = String(techs[0] ?? "").trim();
-                      const secondarySorted = sortTechniques(techs).filter((t) => t !== primary);
-                      const display = primary ? [primary, ...secondarySorted] : secondarySorted;
+                        if (display.length === 0) return null;
 
-                      if (display.length === 0) return null;
+                        return (
+                          <div className="mt-1 flex flex-wrap gap-1">
+                            {display.map((t) => {
+                              const isPrimary = primary && t === primary;
 
-                      return (
-                        <div className="mt-1 flex flex-wrap gap-1">
-                          {display.map((t) => {
-                            const isPrimary = primary && t === primary;
+                              const cls = isPrimary
+                                ? "text-xs px-2 py-0.5 rounded bg-green-600 text-white border border-green-700 hover:bg-green-700"
+                                : "text-xs px-2 py-0.5 rounded bg-gray-100 text-gray-700 border hover:bg-gray-200";
 
-                            const cls = isPrimary
-                              ? "text-xs px-2 py-0.5 rounded bg-green-600 text-white border border-green-700 hover:bg-green-700"
-                              : "text-xs px-2 py-0.5 rounded bg-gray-100 text-gray-700 border hover:bg-gray-200";
+                              return (
+                                <button
+                                  type="button"
+                                  key={t}
+                                  className={cls}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setTechniqueFilter(t);
+                                  }}
+                                >
+                                  {t}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        );
+                      })()}
+                    </li>
+                  );
+                })}
+              </ul>
 
-                            return (
-                              <button
-                                type="button"
-                                key={t}
-                                className={cls}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setTechniqueFilter(t);
-                                }}
-                              >
-                                {t}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      );
-                    })()}
-                  </li>
-                );
-              })}
-            </ul>
-
-            {filteredRows.length === 0 && !err && (
-              <p className="mt-6 text-gray-600">No rods match your filters.</p>
-            )}
-          </>
-        )}
+              {displayRows.length === 0 && !err && (
+                <p className="mt-6 text-gray-600">No rods match your filters.</p>
+              )}
+            </>
+          );
+        }}
       </RodsListClient>
     </main>
   );
