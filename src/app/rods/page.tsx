@@ -6,7 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
 import RodsListClient from "./RodsListClient";
-import { normalizeTechniques, sortTechniques } from "@/lib/rodTechniques";
+import { normalizeTechniques, sortTechniques, techniqueChipClass } from "@/lib/rodTechniques";
 
 type RodRow = {
   id: string;
@@ -585,9 +585,7 @@ export default function RodLockerPage() {
                             {display.map((t) => {
                               const isPrimary = primary && t === primary;
 
-                              const cls = isPrimary
-                                ? "text-xs px-2 py-0.5 rounded bg-green-600 text-white border border-green-700 hover:bg-green-700"
-                                : "text-xs px-2 py-0.5 rounded bg-gray-200 text-gray-800 border border-gray-300 hover:bg-gray-300";
+                              const cls = techniqueChipClass(isPrimary ? "primary" : "selected", "xs");
 
                               return (
                                 <button

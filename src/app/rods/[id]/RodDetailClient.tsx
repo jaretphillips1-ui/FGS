@@ -8,6 +8,7 @@ import {
   ROD_TECHNIQUES,
   normalizeTechniquesWithPrimary,
   buildTechniquesForStore,
+  techniqueChipClass,
 } from "@/lib/rodTechniques";
 import {
   ROD_POWER_VALUES,
@@ -878,13 +879,10 @@ export default function RodDetailClient({
             const on = techniques.includes(t);
             const isPrimary = primaryTechnique === t;
 
-            const cls =
-              "px-3 py-1 rounded border text-sm transition-colors " +
-              (isPrimary
-                ? "bg-green-600 text-white border-green-700 hover:bg-green-700"
-                : on
-                ? "bg-gray-200 text-gray-900 border-gray-400 hover:bg-gray-300"
-                : "bg-white text-gray-800 border-gray-300 hover:bg-gray-50");
+            const cls = techniqueChipClass(
+  isPrimary ? "primary" : on ? "selected" : "unselected",
+  "sm"
+);
 
             return (
               <button

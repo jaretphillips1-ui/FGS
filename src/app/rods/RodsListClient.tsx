@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { ROD_TECHNIQUES } from "@/lib/rodTechniques";
+import { ROD_TECHNIQUES, techniqueChipClass } from "@/lib/rodTechniques";
 
 export type RodRowLike = {
   id: string;
@@ -178,7 +178,7 @@ export default function RodsListClient<T extends RodRowLike>({
           <span className="opacity-70">Technique:</span>
           <button
             type="button"
-            className="text-xs px-2 py-0.5 rounded bg-gray-200 text-gray-800 border border-gray-300 hover:bg-gray-300"
+            className={techniqueChipClass("selected","xs")}
             onClick={() => setTechFilter("")}
             title="Clear technique filter"
           >

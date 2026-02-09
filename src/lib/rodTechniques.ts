@@ -191,3 +191,34 @@ export function buildTechniquesForStore(primary: string | null | undefined, tech
   const restSorted = sortTechniques(rest);
   return p ? [p, ...restSorted] : restSorted;
 }
+export type TechniqueChipVariant = "primary" | "selected" | "unselected";
+export type TechniqueChipSize = "xs" | "sm" | "md";
+
+/**
+ * Shared chip styling so technique chips look consistent across pages.
+ * - primary: strongest (used for primary technique)
+ * - selected: active/filtered/selected
+ * - unselected: available but not selected
+ */
+export function techniqueChipClass(
+  variant: TechniqueChipVariant,
+  size: TechniqueChipSize = "sm"
+): string {
+  const sizeCls =
+    size === "xs"
+      ? "text-xs px-2 py-0.5"
+      : size === "md"
+      ? "text-sm px-3 py-1.5"
+      : "text-sm px-3 py-1";
+
+  const base = `${sizeCls} rounded border transition-colors`;
+
+  const v =
+    variant === "primary"
+      ? "bg-green-600 text-white border border-green-700 hover:bg-green-700"
+      : variant === "selected"
+      ? "bg-gray-200 text-gray-800 border border-gray-300 hover:bg-gray-300"
+      : "bg-white text-gray-800 border border-gray-300 hover:bg-gray-50";
+
+  return `${base} ${v}`.trim();
+}
