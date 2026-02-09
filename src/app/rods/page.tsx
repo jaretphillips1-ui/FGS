@@ -587,7 +587,7 @@ export default function RodLockerPage() {
 
                               const cls = isPrimary
                                 ? "text-xs px-2 py-0.5 rounded bg-green-600 text-white border border-green-700 hover:bg-green-700"
-                                : "text-xs px-2 py-0.5 rounded bg-gray-100 text-gray-700 border hover:bg-gray-200";
+                                : "text-xs px-2 py-0.5 rounded bg-gray-200 text-gray-800 border border-gray-300 hover:bg-gray-300";
 
                               return (
                                 <button
