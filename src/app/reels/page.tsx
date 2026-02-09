@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { reelHandLabel, reelTypeLabel } from "@/lib/reelSpecs";
+import { SpecChip } from "@/components/SpecChip";
 
 type AnyRecord = Record<string, unknown>;
 const TABLE = "gear_items";
@@ -87,6 +88,17 @@ async function copyToClipboard(text: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+function normalizeRatio(v: unknown): string {
+  // Hide blanks and placeholders
+  const s = String(v ?? "").trim();
+  if (!s) return "—";
+
+  // If user types "7.4" normalize to "7.4:1"
+  if (/^\d+(\.\d+)?$/.test(s)) return `${s}:1`;
+
+  return s;
 }
 
 export default function ReelsPage() {
@@ -174,8 +186,9 @@ export default function ReelsPage() {
 
             const reelType = toText(r.reel_type);
             const hand = toText(r.reel_hand);
-            const ratio = toText(r.reel_gear_ratio);
-            const ipt = toText(r.reel_ipt_in);
+
+            const ratio = normalizeRatio(r.reel_gear_ratio);
+            const ipt = toNum(r.reel_ipt_in);
             const wt = formatOz(r.reel_weight_oz);
             const drag = formatLb(r.reel_max_drag_lb);
 
@@ -227,10 +240,10 @@ export default function ReelsPage() {
                 </div>
 
                 <div className="mt-2 flex flex-wrap gap-2 text-xs">
-                  <span className="px-2 py-1 rounded border bg-white">Ratio: {ratio}</span>
-                  <span className="px-2 py-1 rounded border bg-white">IPT: {ipt}</span>
-                  <span className="px-2 py-1 rounded border bg-white">Drag: {drag}</span>
-                  <span className="px-2 py-1 rounded border bg-white">Weight: {wt}</span>
+                  <SpecChip label="Ratio" value={ratio} />
+                  <SpecChip label="IPT" value={ipt} />
+                  <SpecChip label="Drag" value={drag} />
+                  <SpecChip label="Weight" value={wt} />
                 </div>
               </Link>
             );
@@ -240,4 +253,3 @@ export default function ReelsPage() {
     </main>
   );
 }
-
