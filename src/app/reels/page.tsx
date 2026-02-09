@@ -48,10 +48,53 @@ function formatLb(v: unknown) {
   return `${formatFixed(n, 1)} lb`;
 }
 
+function formatBrandModel(brand: unknown, model: unknown): string | null {
+  const b = String(brand ?? "").trim();
+  const m = String(model ?? "").trim();
+  if (b && m) return `${b} • ${m}`;
+  if (b) return b;
+  if (m) return m;
+  return null;
+}
+
+function shortId(id: string): string {
+  const s = String(id ?? "");
+  if (s.length <= 12) return s;
+  return `${s.slice(0, 4)}…${s.slice(-4)}`;
+}
+
+async function copyToClipboard(text: string): Promise<boolean> {
+  try {
+    if (navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch {
+    // fall through
+  }
+
+  try {
+    const el = document.createElement("textarea");
+    el.value = text;
+    el.setAttribute("readonly", "true");
+    el.style.position = "absolute";
+    el.style.left = "-9999px";
+    document.body.appendChild(el);
+    el.select();
+    const ok = document.execCommand("copy");
+    document.body.removeChild(el);
+    return ok;
+  } catch {
+    return false;
+  }
+}
+
 export default function ReelsPage() {
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
   const [rows, setRows] = useState<AnyRecord[]>([]);
+
+  const [copiedId, setCopiedId] = useState<string | null>(null);
 
   const count = rows.length;
 
@@ -127,6 +170,8 @@ export default function ReelsPage() {
             const id = String(r.id ?? "");
             const name = String(r.name ?? "").trim() || "Reel";
 
+            const brandModel = formatBrandModel(r.brand, r.model);
+
             const reelType = toText(r.reel_type);
             const hand = toText(r.reel_hand);
             const ratio = toText(r.reel_gear_ratio);
@@ -134,16 +179,45 @@ export default function ReelsPage() {
             const wt = formatOz(r.reel_weight_oz);
             const drag = formatLb(r.reel_max_drag_lb);
 
+            const idShort = shortId(id);
+            const wasCopied = copiedId === id;
+
             return (
               <Link
                 key={id}
                 href={`/reels/${id}`}
                 className="border rounded p-4 hover:bg-gray-50 block"
+                title={id}
               >
                 <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <div className="font-medium">{name}</div>
-                    <div className="text-xs text-gray-500 break-all">{id}</div>
+                  <div className="min-w-0">
+                    <div className="font-medium truncate">{name}</div>
+
+                    {brandModel ? (
+                      <div className="text-sm text-gray-600 truncate">{brandModel}</div>
+                    ) : null}
+
+                    <div className="mt-1 flex items-center gap-2 text-xs text-gray-500">
+                      <span className="select-none">ID: {idShort}</span>
+
+                      <button
+                        type="button"
+                        className="px-2 py-0.5 rounded border bg-white hover:bg-gray-100"
+                        onClick={async (e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          const ok = await copyToClipboard(id);
+                          if (!ok) return;
+
+                          setCopiedId(id);
+                          window.setTimeout(() => setCopiedId((cur) => (cur === id ? null : cur)), 900);
+                        }}
+                        title="Copy full ID"
+                        aria-label="Copy full reel ID"
+                      >
+                        {wasCopied ? "Copied" : "Copy ID"}
+                      </button>
+                    </div>
                   </div>
 
                   <div className="text-xs text-gray-600 text-right">
@@ -166,3 +240,4 @@ export default function ReelsPage() {
     </main>
   );
 }
+

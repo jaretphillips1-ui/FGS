@@ -17,15 +17,6 @@ export type RodRowLike = {
   rod_techniques?: unknown; // string | string[] | JSON string
 };
 
-type SortKey = "name" | "brand" | "status";
-
-// URL filter values (keep stable even if UI labels change)
-type StatusFilter = "all" | "owned" | "wishlist";
-
-// Your requested defaults:
-const DEFAULT_SORT: SortKey = "brand";
-const DEFAULT_STATUS: StatusFilter = "all";
-
 function coerceTechniques(input: unknown): string[] {
   if (input == null) return [];
   if (Array.isArray(input)) return input.map((v) => String(v)).filter(Boolean);
@@ -50,67 +41,11 @@ function coerceTechniques(input: unknown): string[] {
   return [];
 }
 
-function normalizeStatus(s: string | null | undefined): string {
-  return (s ?? "").trim().toLowerCase();
-}
-
-function isOwned(status: string | null | undefined): boolean {
-  const s = normalizeStatus(status);
-  return s === "owned" || s === "active"; // accept legacy "active"
-}
-
-// Treat legacy "planned" as wishlist for compatibility
-function isWishList(status: string | null | undefined): boolean {
-  const s = normalizeStatus(status);
-  return s === "wishlist" || s === "planned";
-}
-
-/**
- * UI display status:
- * - owned/active -> "owned"
- * - wishlist/planned -> "wish list"
- * - sold/retired/anything else -> "" (hide it)
- */
-export function displayStatus(status: string | null | undefined): "" | "owned" | "wish list" {
-  if (isOwned(status)) return "owned";
-  if (isWishList(status)) return "wish list";
-  return "";
-}
-
-function cmp(a: string, b: string): number {
-  return a.localeCompare(b, undefined, { sensitivity: "base" });
-}
-
 function getString(sp: ReturnType<typeof useSearchParams>, key: string): string {
   return sp.get(key) ?? "";
 }
 
-function normalizeSort(raw: string): SortKey {
-  const s = (raw ?? "").trim().toLowerCase();
-  if (s === "brand" || s === "status" || s === "name") return s;
-  return DEFAULT_SORT;
-}
-
-// Accept old "planned" and normalize it to "wishlist"
-function normalizeStatusFilter(raw: string): StatusFilter {
-  const s = (raw ?? "").trim().toLowerCase();
-  if (s === "all" || s === "owned" || s === "wishlist") return s as StatusFilter;
-  if (s === "planned") return "wishlist";
-  return DEFAULT_STATUS;
-}
-
-/**
- * Build a normalized querystring from state.
- * - Omits defaults (keeps URLs clean)
- * - Trims strings
- * - Stable ordering
- */
-function buildQueryString(state: {
-  q: string;
-  tech: string;
-  sort: SortKey;
-  status: StatusFilter;
-}): string {
+function buildQueryString(state: { q: string; tech: string }): string {
   const params = new URLSearchParams();
 
   const q = state.q.trim();
@@ -118,8 +53,6 @@ function buildQueryString(state: {
 
   if (q) params.set("q", q);
   if (tech) params.set("tech", tech);
-  if (state.sort !== DEFAULT_SORT) params.set("sort", state.sort);
-  if (state.status !== DEFAULT_STATUS) params.set("status", state.status);
 
   return params.toString();
 }
@@ -142,76 +75,38 @@ export default function RodsListClient<T extends RodRowLike>({
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
-  // --- URL -> state (supports back/forward) ---
   const urlQ = React.useMemo(() => getString(searchParams, "q"), [searchParams]);
   const urlTech = React.useMemo(() => getString(searchParams, "tech"), [searchParams]);
-  const urlSort = React.useMemo(
-    () => normalizeSort(getString(searchParams, "sort")),
-    [searchParams]
-  );
-  const urlStatus = React.useMemo(
-    () => normalizeStatusFilter(getString(searchParams, "status")),
-    [searchParams]
-  );
 
   const [q, setQ] = React.useState<string>(urlQ);
   const [techFilter, setTechFilter] = React.useState<string>(urlTech);
-  const [sortKey, setSortKey] = React.useState<SortKey>(urlSort);
-  const [statusFilter, setStatusFilter] = React.useState<StatusFilter>(urlStatus);
 
-  // ✅ IMPORTANT FIX:
-  // Only sync state when the URL values change (back/forward),
-  // not when local state changes (which would "snap back" and make selects feel unclickable).
   React.useEffect(() => {
     setQ((prev) => (prev === urlQ ? prev : urlQ));
     setTechFilter((prev) => (prev === urlTech ? prev : urlTech));
-    setSortKey((prev) => (prev === urlSort ? prev : urlSort));
-    setStatusFilter((prev) => (prev === urlStatus ? prev : urlStatus));
-  }, [urlQ, urlTech, urlSort, urlStatus]);
+  }, [urlQ, urlTech]);
 
   const normalizedQ = q.trim().toLowerCase();
-  const filtersOn =
-    normalizedQ.length > 0 ||
-    techFilter.trim().length > 0 ||
-    sortKey !== DEFAULT_SORT ||
-    statusFilter !== DEFAULT_STATUS;
+  const filtersOn = normalizedQ.length > 0 || techFilter.trim().length > 0;
 
   const lastWrittenUrlRef = React.useRef<string>("");
 
   function clearAll() {
     setQ("");
     setTechFilter("");
-    setSortKey(DEFAULT_SORT);
-    setStatusFilter(DEFAULT_STATUS);
 
-    const nextQs = buildQueryString({
-      q: "",
-      tech: "",
-      sort: DEFAULT_SORT,
-      status: DEFAULT_STATUS,
-    });
+    const nextQs = buildQueryString({ q: "", tech: "" });
     const next = canonicalUrl(pathname, nextQs);
     lastWrittenUrlRef.current = next;
     router.replace(next);
   }
 
-  // State -> URL (debounced)
   React.useEffect(() => {
     const t = setTimeout(() => {
-      const nextQs = buildQueryString({
-        q,
-        tech: techFilter,
-        sort: sortKey,
-        status: statusFilter,
-      });
+      const nextQs = buildQueryString({ q, tech: techFilter });
       const nextUrl = canonicalUrl(pathname, nextQs);
 
-      const currentQs = buildQueryString({
-        q: urlQ,
-        tech: urlTech,
-        sort: urlSort,
-        status: urlStatus,
-      });
+      const currentQs = buildQueryString({ q: urlQ, tech: urlTech });
       const currentUrl = canonicalUrl(pathname, currentQs);
 
       if (nextUrl === currentUrl) return;
@@ -222,41 +117,22 @@ export default function RodsListClient<T extends RodRowLike>({
     }, 250);
 
     return () => clearTimeout(t);
-  }, [q, techFilter, sortKey, statusFilter, pathname, router, urlQ, urlTech, urlSort, urlStatus]);
+  }, [q, techFilter, pathname, router, urlQ, urlTech]);
 
-  const filtered = (rows ?? [])
-    .filter((r) => {
-      const hay = [r.name, r.brand, r.model, r.power, r.action, r.line, r.notes]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
+  const filtered = (rows ?? []).filter((r) => {
+    const hay = [r.name, r.brand, r.model, r.power, r.action, r.line, r.notes]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
 
-      const matchesText = normalizedQ.length === 0 || hay.includes(normalizedQ);
+    const matchesText = normalizedQ.length === 0 || hay.includes(normalizedQ);
 
-      const techniques = coerceTechniques(r.rod_techniques);
-      const tf = techFilter.trim();
-      const matchesTech = tf.length === 0 || techniques.includes(tf);
+    const techniques = coerceTechniques(r.rod_techniques);
+    const tf = techFilter.trim();
+    const matchesTech = tf.length === 0 || techniques.includes(tf);
 
-      const matchesStatus =
-        statusFilter === "all"
-          ? true
-          : statusFilter === "owned"
-          ? isOwned(r.status)
-          : isWishList(r.status);
-
-      return matchesText && matchesTech && matchesStatus;
-    })
-    .sort((a, b) => {
-      if (sortKey === "name") return cmp(a.name ?? "", b.name ?? "");
-      if (sortKey === "brand") return cmp(a.brand ?? "", b.brand ?? "");
-      return cmp(displayStatus(a.status), displayStatus(b.status));
-    });
-
-  const ownedCount = React.useMemo(() => filtered.filter((r) => isOwned(r.status)).length, [filtered]);
-  const wishListCount = React.useMemo(
-    () => filtered.filter((r) => isWishList(r.status)).length,
-    [filtered]
-  );
+    return matchesText && matchesTech;
+  });
 
   return (
     <div>
@@ -282,33 +158,11 @@ export default function RodsListClient<T extends RodRowLike>({
           ))}
         </select>
 
-        <select
-          className="w-full rounded-md border px-3 py-2 text-sm sm:w-48"
-          value={sortKey}
-          onChange={(e) => setSortKey(e.target.value as SortKey)}
-          title="Sort"
-        >
-          <option value="brand">Sort: Brand</option>
-          <option value="name">Sort: Name</option>
-          <option value="status">Sort: Status</option>
-        </select>
-
-        <select
-          className="w-full rounded-md border px-3 py-2 text-sm sm:w-44"
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
-          title="Status"
-        >
-          <option value="all">All</option>
-          <option value="owned">Owned</option>
-          <option value="wishlist">Wish list</option>
-        </select>
-
         <button
           type="button"
           className="rounded-md border px-3 py-2 text-sm"
           onClick={clearAll}
-          title="Reset to defaults"
+          title="Reset search + technique"
         >
           Clear
         </button>
@@ -316,10 +170,6 @@ export default function RodsListClient<T extends RodRowLike>({
         <div className="text-sm opacity-70 sm:ml-auto">
           {filtered.length} / {(rows ?? []).length}
           {filtersOn ? <span className="ml-2">(filtered)</span> : null}
-          <span className="ml-2">•</span>
-          <span className="ml-2">Owned: {ownedCount}</span>
-          <span className="ml-2">•</span>
-          <span className="ml-2">Wish list: {wishListCount}</span>
         </div>
       </div>
 
