@@ -166,6 +166,9 @@ export default function ReelsPage() {
           <Link className="px-4 py-2 rounded border" href="/rods">
             Rods
           </Link>
+          <Link className="px-4 py-2 rounded border" href="/combos">
+            Combos
+          </Link>
           <Link className="px-4 py-2 rounded bg-black text-white" href="/reels/new">
             New Reel
           </Link>

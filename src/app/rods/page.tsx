@@ -122,10 +122,7 @@ function StatusBadge({
       ? "text-xs px-2 py-0.5 rounded bg-purple-600 text-white border border-purple-700"
       : "text-xs px-2 py-0.5 rounded bg-gray-100 text-gray-700 border";
 
-  const clickable = onToggle
-    ? "cursor-pointer hover:opacity-90 active:opacity-80"
-    : "";
-
+  const clickable = onToggle ? "cursor-pointer hover:opacity-90 active:opacity-80" : "";
   const disabledCls = disabled ? "opacity-60 cursor-not-allowed" : "";
 
   const cls = `${base} ${clickable} ${disabledCls}`.trim();
@@ -355,10 +352,7 @@ export default function RodLockerPage() {
     setErr(null);
 
     try {
-      const { error } = await supabase
-        .from("gear_items")
-        .update({ status: next })
-        .eq("id", row.id);
+      const { error } = await supabase.from("gear_items").update({ status: next }).eq("id", row.id);
 
       if (error) {
         setErr(error.message);
@@ -366,9 +360,7 @@ export default function RodLockerPage() {
       }
 
       // optimistic UI update (no reload)
-      setRows((prev) =>
-        prev.map((r) => (r.id === row.id ? { ...r, status: next } : r))
-      );
+      setRows((prev) => prev.map((r) => (r.id === row.id ? { ...r, status: next } : r)));
     } finally {
       setToggling((m) => {
         const copy = { ...m };
@@ -390,7 +382,17 @@ export default function RodLockerPage() {
   if (authState === "unknown") {
     return (
       <main className="p-6">
-        <h1 className="text-2xl font-bold">Rod Locker</h1>
+        <div className="flex items-center justify-between gap-3">
+          <h1 className="text-2xl font-bold">Rod Locker</h1>
+          <div className="flex items-center gap-2">
+            <Link className="px-3 py-2 rounded border" href="/reels">
+              Reels
+            </Link>
+            <Link className="px-3 py-2 rounded border" href="/combos">
+              Combos
+            </Link>
+          </div>
+        </div>
 
         {err && <p className="mt-3 text-sm text-red-600">{err}</p>}
 
@@ -413,7 +415,17 @@ export default function RodLockerPage() {
   if (authState === "signed_out" || !userEmail) {
     return (
       <main className="p-6">
-        <h1 className="text-2xl font-bold">Rod Locker</h1>
+        <div className="flex items-center justify-between gap-3">
+          <h1 className="text-2xl font-bold">Rod Locker</h1>
+          <div className="flex items-center gap-2">
+            <Link className="px-3 py-2 rounded border" href="/reels">
+              Reels
+            </Link>
+            <Link className="px-3 py-2 rounded border" href="/combos">
+              Combos
+            </Link>
+          </div>
+        </div>
 
         {err && <p className="mt-3 text-sm text-red-600">{err}</p>}
 
@@ -443,9 +455,18 @@ export default function RodLockerPage() {
             {refreshing ? <span className="ml-2 opacity-70">(refreshing…)</span> : null}
           </p>
         </div>
-        <button className="px-3 py-2 rounded border" onClick={signOut}>
-          Sign out
-        </button>
+
+        <div className="flex items-center gap-2">
+          <Link className="px-3 py-2 rounded border" href="/reels">
+            Reels
+          </Link>
+          <Link className="px-3 py-2 rounded border" href="/combos">
+            Combos
+          </Link>
+          <button className="px-3 py-2 rounded border" onClick={signOut}>
+            Sign out
+          </button>
+        </div>
       </div>
 
       <div className="mt-6 flex gap-3 flex-wrap">
@@ -518,7 +539,6 @@ export default function RodLockerPage() {
                     onClick={() => {
                       setStatusFilter("all");
                       setSortKey("brand");
-                      // RodsListClient accepts string; pass "" to clear without hooks/type hacks
                       setTechniqueFilter("");
                     }}
                     title="Reset list controls"
