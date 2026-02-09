@@ -877,20 +877,28 @@ export default function RodDetailClient({
           {ROD_TECHNIQUES.map((t) => {
             const on = techniques.includes(t);
             const isPrimary = primaryTechnique === t;
+
+            const cls =
+              "px-3 py-1 rounded border text-sm transition-colors " +
+              (isPrimary
+                ? "bg-green-600 text-white border-green-700 hover:bg-green-700"
+                : on
+                ? "bg-gray-200 text-gray-900 border-gray-400 hover:bg-gray-300"
+                : "bg-white text-gray-800 border-gray-300 hover:bg-gray-50");
+
             return (
               <button
                 key={t}
                 type="button"
                 onClick={() => toggleTechnique(t)}
-                className={
-                  "px-3 py-1 rounded border text-sm " +
-                  (isPrimary
-                    ? "bg-black text-white border-black"
-                    : on
-                    ? "bg-gray-100 border-gray-300"
-                    : "bg-white")
+                className={cls}
+                title={
+                  on
+                    ? isPrimary
+                      ? "Primary (click to remove)"
+                      : "Selected (click to make primary)"
+                    : "Click to add"
                 }
-                title={on ? (isPrimary ? "Primary (click to remove)" : "Click to make primary") : "Click to add"}
                 aria-pressed={on}
               >
                 {t}
