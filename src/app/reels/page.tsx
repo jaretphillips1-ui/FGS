@@ -23,16 +23,29 @@ function toText(v: unknown) {
   return s ? s : "—";
 }
 
-function formatOz(v: unknown) {
+function toNum(v: unknown): number | null {
   const n = typeof v === "number" ? v : Number(v);
-  if (!Number.isFinite(n)) return "—";
-  return `${n} oz`;
+  return Number.isFinite(n) ? n : null;
+}
+
+function formatFixed(n: number, digits: number) {
+  // avoid 6.30000000004 style noise
+  const rounded = Math.round(n * Math.pow(10, digits)) / Math.pow(10, digits);
+  return rounded.toFixed(digits).replace(/\.0$/, "");
+}
+
+function formatOz(v: unknown) {
+  const n = toNum(v);
+  if (n == null) return "—";
+  // one decimal max for ounces
+  return `${formatFixed(n, 1)} oz`;
 }
 
 function formatLb(v: unknown) {
-  const n = typeof v === "number" ? v : Number(v);
-  if (!Number.isFinite(n)) return "—";
-  return `${n} lb`;
+  const n = toNum(v);
+  if (n == null) return "—";
+  // one decimal max for drag (usually whole, but 0.5 exists)
+  return `${formatFixed(n, 1)} lb`;
 }
 
 export default function ReelsPage() {

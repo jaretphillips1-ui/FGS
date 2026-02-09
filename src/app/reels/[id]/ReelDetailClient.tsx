@@ -51,6 +51,12 @@ function clampNum(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
 }
 
+function roundTo(n: number, precision: number) {
+  if (!Number.isFinite(n)) return n;
+  const p = Math.max(0, Math.min(6, Math.trunc(precision)));
+  const f = Math.pow(10, p);
+  return Math.round(n * f) / f;
+}
 function toTitle(s: string) {
   return s.replace(/_/g, " ").replace(/\b\w/g, (m) => m.toUpperCase());
 }
@@ -71,6 +77,7 @@ function StepperNumber({
   min,
   max,
   step = 1,
+  precision,
   disabled,
   placeholder,
   inputMode = "numeric",
@@ -89,14 +96,12 @@ function StepperNumber({
   function commitFromString(s: string) {
     const n = numOrNullFromInput(s);
     if (n == null) return onChange(null);
-    const clamped = clampNum(n, min, max);
-    onChange(clamped);
+    const clamped = clampNum(n, min, max); onChange(precision == null ? clamped : roundTo(clamped, precision));
   }
 
   function bump(dir: 1 | -1) {
     const cur = value == null || !Number.isFinite(value) ? 0 : value;
-    const next = clampNum(cur + dir * step, min, max);
-    onChange(next);
+    const next = clampNum(cur + dir * step, min, max); onChange(precision == null ? next : roundTo(next, precision));
   }
 
   return (
@@ -509,7 +514,7 @@ export default function ReelDetailClient(props: { id?: string }) {
               min={0}
               max={40}
               step={0.1}
-              inputMode="decimal"
+              precision={1} inputMode="decimal"
               placeholder="e.g. 7.8"
             />
           </div>
