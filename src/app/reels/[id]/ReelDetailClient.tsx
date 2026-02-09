@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { InputHTMLAttributes } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { REEL_HAND_VALUES, REEL_TYPE_VALUES } from "@/lib/reelSpecs";
 
@@ -10,6 +10,8 @@ type AnyRecord = Record<string, unknown>;
 const TABLE = "gear_items";
 
 const READONLY_KEYS = new Set(["id", "created_at", "updated_at", "owner_id", "gear_type"]);
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function errMsg(e: unknown, fallback: string) {
   if (e instanceof Error) return e.message || fallback;
@@ -62,9 +64,7 @@ function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
   ]);
 }
 
-/**
- * Always-visible steppers: input + dedicated up/down control on the right.
- */
+/** Always-visible steppers: input + dedicated up/down control on the right. */
 function StepperNumber({
   value,
   onChange,
@@ -102,7 +102,8 @@ function StepperNumber({
   return (
     <div
       className={
-        "flex items-stretch rounded border overflow-hidden bg-white " + (disabled ? "opacity-60" : "")
+        "flex items-stretch rounded border overflow-hidden bg-white " +
+        (disabled ? "opacity-60" : "")
       }
     >
       <input
@@ -141,8 +142,16 @@ function StepperNumber({
   );
 }
 
-export default function ReelDetailClient({ id }: { id: string }) {
+export default function ReelDetailClient(props: { id?: string }) {
   const router = useRouter();
+
+  // useParams() typing can be awkward; avoid `any` but still safely read "id"
+  const params = useParams() as unknown as Record<string, string | string[] | undefined>;
+
+  // Pull id from URL as the source of truth; fall back to prop if present.
+  const routeIdRaw = params["id"];
+  const routeId = Array.isArray(routeIdRaw) ? routeIdRaw[0] : routeIdRaw;
+  const id = String(props.id ?? routeId ?? "").trim();
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -185,9 +194,7 @@ export default function ReelDetailClient({ id }: { id: string }) {
   const isDirty = useMemo(() => {
     if (!original || !draft) return false;
     for (const k of editableKeys) {
-      const before = original[k];
-      const after = draft[k];
-      if (!deepEqual(before, after)) return true;
+      if (!deepEqual(original[k], draft[k])) return true;
     }
     return false;
   }, [original, draft, editableKeys]);
@@ -199,6 +206,17 @@ export default function ReelDetailClient({ id }: { id: string }) {
     async function load() {
       setLoading(true);
       setErr(null);
+      setValidationErr(null);
+      setSavedMsg(null);
+
+      // Guard: never hit Supabase with undefined/invalid UUID
+      if (!id || !UUID_RE.test(id)) {
+        setOriginal(null);
+        setDraft(null);
+        setErr(`Invalid reel id in URL: "${id || "(empty)"}"`);
+        setLoading(false);
+        return;
+      }
 
       try {
         const sessionRes = await withTimeout(supabase.auth.getSession(), 6000, "auth.getSession()");
@@ -209,24 +227,26 @@ export default function ReelDetailClient({ id }: { id: string }) {
         }
 
         const res = await withTimeout(
-          supabase.from(TABLE).select("*").eq("id", id).single(),
+          supabase.from(TABLE).select("*").eq("id", id).eq("gear_type", "reel").maybeSingle(),
           8000,
           "gear_items select"
         );
 
         if (res.error) throw res.error;
-        const row = res.data as AnyRecord;
 
-        if (row?.gear_type !== "reel") {
-          setErr(`Warning: gear_type is "${String(row?.gear_type ?? "")}".`);
-        }
+        const row = (res.data ?? null) as AnyRecord | null;
 
         if (!cancelled && seq === loadSeq.current) {
           setOriginal(row);
           setDraft(row);
         }
       } catch (e: unknown) {
-        if (!cancelled && seq === loadSeq.current) setErr(errMsg(e, "Failed to load reel."));
+        console.error("[ReelDetailClient] load error:", e);
+        if (!cancelled && seq === loadSeq.current) {
+          setErr(errMsg(e, "Failed to load reel."));
+          setOriginal(null);
+          setDraft(null);
+        }
       } finally {
         if (!cancelled && seq === loadSeq.current) setLoading(false);
       }
@@ -236,7 +256,6 @@ export default function ReelDetailClient({ id }: { id: string }) {
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, router]);
 
   async function deleteReel() {
@@ -330,7 +349,31 @@ export default function ReelDetailClient({ id }: { id: string }) {
   }
 
   if (loading) return <main className="p-6">Loading…</main>;
-  if (!draft || !original) return <main className="p-6">Not found.</main>;
+
+  if (err) {
+    return (
+      <main className="max-w-3xl mx-auto p-6 space-y-3">
+        <div className="border rounded p-3 bg-red-50 text-red-800 whitespace-pre-wrap">{err}</div>
+        <button className="px-4 py-2 rounded border" onClick={() => router.push("/reels")}>
+          Back to reels
+        </button>
+      </main>
+    );
+  }
+
+  if (!draft || !original) {
+    return (
+      <main className="max-w-3xl mx-auto p-6 space-y-3">
+        <div className="text-lg font-semibold">Not found.</div>
+        <div className="text-sm text-gray-600">
+          This reel either doesn’t exist, isn’t a reel, or you don’t have access to it.
+        </div>
+        <button className="px-4 py-2 rounded border" onClick={() => router.push("/reels")}>
+          Back to reels
+        </button>
+      </main>
+    );
+  }
 
   const title = String(draft.name ?? "").trim() || "Reel";
 
@@ -369,7 +412,6 @@ export default function ReelDetailClient({ id }: { id: string }) {
         </div>
       </div>
 
-      {err && <div className="border rounded p-3 bg-red-50 text-red-800">{err}</div>}
       {validationErr && <div className="border rounded p-3 bg-red-50 text-red-800">{validationErr}</div>}
       {savedMsg && <div className="border rounded p-3 bg-green-50 text-green-800">{savedMsg}</div>}
 
@@ -394,7 +436,7 @@ export default function ReelDetailClient({ id }: { id: string }) {
               onChange={(e) => setDraft((d) => ({ ...(d ?? {}), status: e.target.value }))}
             >
               <option value="owned">Owned</option>
-              <option value="planned">Planned</option>
+              <option value="planned">Wishlist</option>
             </select>
           </label>
         )}
@@ -440,7 +482,7 @@ export default function ReelDetailClient({ id }: { id: string }) {
               className="border rounded px-3 py-2"
               value={String((draft as AnyRecord).reel_gear_ratio ?? "")}
               onChange={(e) => setDraft((d) => ({ ...(d ?? {}), reel_gear_ratio: e.target.value }))}
-              placeholder='e.g., 7.4:1'
+              placeholder="e.g., 7.4:1"
             />
           </label>
         </div>
@@ -492,7 +534,7 @@ export default function ReelDetailClient({ id }: { id: string }) {
             className="border rounded px-3 py-2"
             value={String((draft as AnyRecord).reel_bearings ?? "")}
             onChange={(e) => setDraft((d) => ({ ...(d ?? {}), reel_bearings: e.target.value }))}
-            placeholder='e.g., 6+1'
+            placeholder="e.g., 6+1"
           />
         </label>
 
@@ -502,7 +544,7 @@ export default function ReelDetailClient({ id }: { id: string }) {
             className="border rounded px-3 py-2"
             value={String((draft as AnyRecord).reel_line_capacity ?? "")}
             onChange={(e) => setDraft((d) => ({ ...(d ?? {}), reel_line_capacity: e.target.value }))}
-            placeholder='e.g., 12/120, 14/110, 30B/150'
+            placeholder="e.g., 12/120, 14/110, 30B/150"
           />
         </label>
 
@@ -511,7 +553,9 @@ export default function ReelDetailClient({ id }: { id: string }) {
           <input
             className="border rounded px-3 py-2"
             value={String((draft as AnyRecord).reel_brake_system ?? "")}
-            onChange={(e) => setDraft((d) => ({ ...(d ?? {}), reel_brake_system: e.target.value }))}
+            onChange={(e) =>
+              setDraft((d) => ({ ...(d ?? {}), reel_brake_system: e.target.value }))
+            }
             placeholder="e.g., DC, SV, Magnetic, Centrifugal"
           />
         </label>
