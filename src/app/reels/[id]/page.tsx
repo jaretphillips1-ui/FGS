@@ -1,5 +1,10 @@
 import ReelDetailClient from "./ReelDetailClient";
 
-export default function ReelDetailPage({ params }: { params: { id: string } }) {
-  return <ReelDetailClient id={params.id} />;
+export default async function ReelDetailPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const { id } = await params;
+  return <ReelDetailClient id={id} />;
 }
