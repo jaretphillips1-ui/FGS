@@ -32,23 +32,28 @@ function hardTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
   ]);
 }
 
-// Soft timeout: returns { timedOut: true } instead of throwing.
+// Soft timeout: returns { timedOut: true } ONLY if our timer fires.
+// (Fixes false "Auth check is taking longer..." when simply signed out.)
 async function getSessionSoft(ms: number): Promise<{
   timedOut: boolean;
   session: Session | null;
   error?: string;
 }> {
   try {
-    const res = await Promise.race([
-      supabase.auth.getSession(),
-      new Promise<{ data: { session: Session | null } }>((resolve) =>
-        setTimeout(() => resolve({ data: { session: null } }), ms)
-      ),
-    ]);
+    const timeoutP = new Promise<{ __timedOut: true }>((resolve) =>
+      setTimeout(() => resolve({ __timedOut: true }), ms)
+    );
 
-    const session = res.data.session ?? null;
-    const timedOut = session == null;
-    return { timedOut, session };
+    const sessionP = supabase.auth.getSession().then((res) => ({ res }));
+
+    const raced = await Promise.race([sessionP, timeoutP]);
+
+    if ("__timedOut" in raced) {
+      return { timedOut: true, session: null };
+    }
+
+    const session = raced.res.data.session ?? null;
+    return { timedOut: false, session };
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : "Auth session error.";
     return { timedOut: false, session: null, error: msg };
@@ -347,7 +352,6 @@ export default function RodLockerPage() {
     const next = toggleStatusValue(row.status);
     if (!next) return;
 
-    // prevent double clicks
     setToggling((m) => ({ ...m, [row.id]: true }));
     setErr(null);
 
@@ -359,7 +363,6 @@ export default function RodLockerPage() {
         return;
       }
 
-      // optimistic UI update (no reload)
       setRows((prev) => prev.map((r) => (r.id === row.id ? { ...r, status: next } : r)));
     } finally {
       setToggling((m) => {
@@ -396,9 +399,7 @@ export default function RodLockerPage() {
 
         {err && <p className="mt-3 text-sm text-red-600">{err}</p>}
 
-        <p className="mt-2 text-gray-600">
-          Checking your session… if this doesn’t clear, hit Retry.
-        </p>
+        <p className="mt-2 text-gray-600">Checking your session… if this doesn’t clear, hit Retry.</p>
 
         <div className="mt-6 flex gap-3 flex-wrap">
           <button className="px-4 py-2 rounded border" onClick={() => load()}>
@@ -487,7 +488,6 @@ export default function RodLockerPage() {
 
       <RodsListClient rows={rows}>
         {(filteredRows, setTechniqueFilter) => {
-          // Display-only filter (status) on top of technique/search filtering
           const statusFiltered = filteredRows.filter((r) => {
             if (statusFilter === "all") return true;
             if (statusFilter === "owned") return isOwnedStatus(r.status);
@@ -495,7 +495,6 @@ export default function RodLockerPage() {
             return true;
           });
 
-          // Display-only sort
           const displayRows = sortRows(statusFiltered, sortKey);
 
           return (
@@ -548,8 +547,7 @@ export default function RodLockerPage() {
                 </div>
 
                 <div className="text-sm text-gray-600">
-                  {displayRows.length} / {rows.length} • Owned: {counts.owned} • Wish list:{" "}
-                  {counts.wish}
+                  {displayRows.length} / {rows.length} • Owned: {counts.owned} • Wish list: {counts.wish}
                 </div>
               </div>
 
@@ -566,16 +564,10 @@ export default function RodLockerPage() {
                       <div className="flex items-center justify-between gap-3">
                         <div className="min-w-0">
                           <div className="font-medium truncate">{r.name}</div>
-                          {brandModel ? (
-                            <div className="text-sm text-gray-600 truncate">{brandModel}</div>
-                          ) : null}
+                          {brandModel ? <div className="text-sm text-gray-600 truncate">{brandModel}</div> : null}
                         </div>
 
-                        <StatusBadge
-                          status={r.status}
-                          disabled={!!toggling[r.id]}
-                          onToggle={() => toggleRodStatus(r)}
-                        />
+                        <StatusBadge status={r.status} disabled={!!toggling[r.id]} onToggle={() => toggleRodStatus(r)} />
                       </div>
 
                       {(() => {
@@ -619,9 +611,7 @@ export default function RodLockerPage() {
                 })}
               </ul>
 
-              {displayRows.length === 0 && !err && (
-                <p className="mt-6 text-gray-600">No rods match your filters.</p>
-              )}
+              {displayRows.length === 0 && !err && <p className="mt-6 text-gray-600">No rods match your filters.</p>}
             </>
           );
         }}
