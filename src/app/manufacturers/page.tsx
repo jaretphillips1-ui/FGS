@@ -33,16 +33,9 @@ export default function Page() {
             className="border rounded p-4 bg-white hover:bg-gray-50 flex items-center gap-3"
             title={m.website}
           >
-            {m.logoSrc ? (
-              // We’ll wire real logos later once you drop them into /public.
-              <div className="h-12 w-12 rounded bg-gray-50 border border-gray-200 grid place-items-center overflow-hidden">
-                <img src={m.logoSrc} alt={`${m.name} logo`} className="max-h-10 max-w-10" />
-              </div>
-            ) : (
-              <div className="h-12 w-12 rounded bg-gray-900 text-white grid place-items-center font-semibold">
-                {initials(m.name)}
-              </div>
-            )}
+            <div className="h-12 w-12 rounded bg-gray-900 text-white grid place-items-center font-semibold">
+              {initials(m.name)}
+            </div>
 
             <div className="min-w-0">
               <div className="font-medium truncate">{m.name}</div>
