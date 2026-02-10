@@ -83,6 +83,76 @@ function CatPill({ c }: { c: Category }) {
   );
 }
 
+// Basic URL detection (http/https) inside notes
+const URL_RE = /\bhttps?:\/\/[^\s<>()]+/gi;
+
+function safeUrl(raw: string): string {
+  const s = String(raw ?? "").trim();
+  return s;
+}
+
+function shortUrlLabel(raw: string): string {
+  const s = safeUrl(raw);
+  try {
+    const u = new URL(s);
+    const host = u.host.replace(/^www\./i, "");
+    const path = (u.pathname ?? "") + (u.search ?? "");
+    if (!path || path === "/") return host;
+    const trimmed = path.length > 22 ? `${path.slice(0, 19)}…` : path;
+    return `${host}${trimmed.startsWith("/") ? "" : "/"}${trimmed}`;
+  } catch {
+    // Fallback (should be rare)
+    const noProto = s.replace(/^https?:\/\//i, "").replace(/^www\./i, "");
+    if (noProto.length <= 28) return noProto;
+    return `${noProto.slice(0, 24)}…`;
+  }
+}
+
+function LinkifiedNotes({ text }: { text: string }) {
+  // Preserve newlines and spacing while linkifying URLs
+  const src = String(text ?? "");
+  const parts: React.ReactNode[] = [];
+
+  let last = 0;
+  let match: RegExpExecArray | null;
+
+  // Need a fresh regex instance because global regex keeps state
+  const re = new RegExp(URL_RE.source, "gi");
+
+  while ((match = re.exec(src)) !== null) {
+    const start = match.index;
+    const url = match[0];
+
+    if (start > last) {
+      parts.push(src.slice(last, start));
+    }
+
+    const href = safeUrl(url);
+    const label = shortUrlLabel(href);
+
+    parts.push(
+      <a
+        key={`u-${start}-${href}`}
+        href={href}
+        target="_blank"
+        rel="noreferrer noopener"
+        className="underline underline-offset-2 text-blue-700 hover:text-blue-900 break-all"
+        title={href}
+      >
+        {label}
+      </a>
+    );
+
+    last = start + url.length;
+  }
+
+  if (last < src.length) {
+    parts.push(src.slice(last));
+  }
+
+  return <div className="whitespace-pre-wrap">{parts}</div>;
+}
+
 function ModalShell({
   title,
   onClose,
@@ -134,7 +204,11 @@ function Card({
         </div>
       </div>
 
-      {item.notes ? <div className="text-sm text-gray-700 mt-2 whitespace-pre-wrap">{item.notes}</div> : null}
+      {item.notes ? (
+        <div className="text-sm text-gray-700 mt-2">
+          <LinkifiedNotes text={item.notes} />
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -553,12 +627,7 @@ export default function Page() {
             {formErr ? <div className="text-sm text-red-700">{formErr}</div> : null}
 
             <div className="flex items-center justify-end gap-2 pt-2">
-              <button
-                type="button"
-                className="px-4 py-2 rounded border"
-                onClick={() => setShowModal(false)}
-                disabled={saving}
-              >
+              <button type="button" className="px-4 py-2 rounded border" onClick={() => setShowModal(false)} disabled={saving}>
                 Cancel
               </button>
               <button
