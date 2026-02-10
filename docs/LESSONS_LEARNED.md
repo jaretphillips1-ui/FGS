@@ -1,6 +1,6 @@
 # FGS – Lessons Learned (Ops + Build)
 
-This file exists so we don’t repeat the same “patch spiral” across future apps.  
+This file exists so we don’t repeat the same “patch spiral” across future apps.
 When things feel stuck, **zoom out, choose a simpler shape**, and protect the workspace with guardrails.
 
 ## 1) Patch vs Rewrite: a decision rule
@@ -21,24 +21,22 @@ When things feel stuck, **zoom out, choose a simpler shape**, and protect the wo
 ## 2) PowerShell “gotchas” we hit (and how we avoid them)
 
 ### `param()` must be first
-In a `.ps1` script, `param()` must appear before any executable statement.  
-If you put `Set-StrictMode` first, the script fails in surprising ways.
+In a `.ps1` script, `param()` must appear before any executable statement.
 
 **Guardrail:** Anytime a script uses `param`, keep `param` as the first line.
 
 ### StrictMode makes small mistakes loud (good)
-StrictMode is great for catching drift (like `$_` not existing), but it requires careful string building.
+StrictMode is great for catching drift, but it requires careful string building.
 
-**Guardrail:** When generating scripts or profile blocks, avoid accidental interpolation of `$()`, `$var`, and `$_`:
+**Guardrails:**
 - Prefer single-quoted here-strings `@' ... '@` for literal content.
-- If you *must* use double-quoted blocks, escape `$` as `` `$ `` inside the block.
-- Keep error messages static inside generated blocks unless you explicitly escape.
+- If you must use double-quoted blocks, escape `$` as `` `$ `` inside the block.
+- Keep generated content as static as possible.
 
 ## 3) Separate concerns: “truth generation” vs “prompt hook”
-
 We got stability by splitting:
-- `scripts\fgs-truth.ps1` = **compute the footer text**
-- Profile block / `prompt` = **decide when to print** + cache behavior
+- a normal script that computes the “truth” output
+- a prompt/profile hook that decides when to print it
 
 **Guardrail:** Don’t bury logic inside a profile string if it can live in a normal `.ps1`.
 
@@ -46,23 +44,19 @@ We got stability by splitting:
 
 Before writing or mirroring anything:
 - Print the exact targets (full paths).
-- Create a dedicated backup bucket (e.g., `scripts\_bak\YYYYMMDD_HHMMSS`).
-- Backup any existing targets there (never Desktop root, never repo root).
+- Ensure folders exist.
+- Avoid writing to Desktop root or repo root unless explicitly intended.
 
-**Guardrail:** Every “one-paste” should enumerate targets first.
+**Guardrail:** Every “one-paste” that writes files must enumerate targets first.
 
 ## 5) Prefer “known-good primitives” over clever generation
-
 When generation gets tricky:
 - Use fewer layers (avoid nested here-strings).
 - Build small, testable blocks.
-- Run the smallest piece directly (call the script manually) before wiring it into the prompt.
-
-**Guardrail:** Test the truth script alone (`& scripts\fgs-truth.ps1`) before installing the prompt wrapper.
+- Run the smallest piece directly before wiring it into anything bigger.
 
 ## 6) Make drift visible early (the entire point of HARD TRUTH)
-
-The footer is not “nice-to-have”; it’s a drift alarm:
+The footer is a drift alarm:
 - Git clean/dirty
 - Desktop root offenders
 - Mirror file counts
@@ -71,61 +65,42 @@ The footer is not “nice-to-have”; it’s a drift alarm:
 
 **Guardrail:** If the footer is failing, fix that first — it is a safety system.
 
-## 7) Stop laser-focus: ask “What is the simplest shape?”
+## 7) Paste discipline: never paste transcripts into PowerShell
+- Do not paste lines beginning with `PS>` / `>>` or copied command output.
+- PowerShell will try to execute them, causing cascading errors.
 
-When stuck, answer these:
-- What is the goal in one sentence?
-- What is the simplest data shape?
-- Can we split this into two scripts?
-- Can we delete complexity instead of preserving it?
+**Guardrail:** Paste **only clean commands** (no prompts, no output).
 
-If the answer is “yes”, rewrite.
+## 8) File edit workflow discipline (avoids “ghost editor” mistakes)
+- Default to PowerShell read/overwrite (no editor assumptions).
+- Prefer full-file replaces or a safe scripted patch — not manual line edits.
+
+**Guardrail:** If we don’t have the current file content in chat, we must `Get-Content -Raw <path>` first.
+
+## 9) No placeholders in paste-ready commands (real-path rule)
+- Never run paste-ready commands containing fake/example paths like `FULL\PATH\TO\...`.
+- Never use placeholder tokens inside paste-ready blocks (e.g. `PASTE_*_HERE`).
+
+**Guardrail:** If a command refers to a path, it must be a real path in your environment.
+
+## 10) Line endings: LF policy + staging failures
+If Git refuses to stage due to line endings (example: `fatal: CRLF would be replaced by LF in <file>`), normalize to LF then stage:
+
+- `$raw = Get-Content -Raw <path>`
+- `$raw = $raw -replace "`r`n","`n" -replace "`r","`n"`
+- `Set-Content -NoNewline -Encoding UTF8 <path> $raw`
+
+## 11) Process hygiene: node / Next.js dev locks
+- Prefer graceful stop (Ctrl+C in the dev-server window).
+- Forced kill is last resort.
+- `.next\dev\lock` is safe to remove only when the dev server is stopped.
+- If node processes exist, inspect command lines before killing:
+  - `Get-CimInstance Win32_Process -Filter "Name='node.exe'" | Select-Object ProcessId,CommandLine`
+
+## 12) Reuse shared UI primitives for consistency
+When multiple pages need the same UX behavior, extract a shared component (example: `SourceLink` for short external URLs).
+
+**Guardrail:** Prefer one shared component over copy/paste logic across pages.
 
 ---
-Last updated: 2026-02-05
-
-
-# Lessons Learned (Ops / Guardrails)
-
-## 1) Never paste transcripts into PowerShell
-- Do not paste lines that begin with `PS>` or `>>`, or include copied command output.
-- PowerShell will try to execute them as commands, causing cascading errors and sometimes background jobs.
-- Rule: paste **only clean commands** (no prompts, no output).
-
-## 2) Prefer line-based edits over multiline regex for script patching
-- Multiline regex replacements are brittle and can break parentheses/braces, leading to parser errors.
-- Safer approach:
-  - Find a stable anchor line
-  - Insert/replace by line index
-
-## 3) Script backups must never live inside repos
-- Backups like `*.bak_*` inside a repo create clutter and risk accidental commits.
-- Canonical rule: backups go to a **project save root** (e.g. `_SAVES\<Project>\SCRIPT_BACKUPS`).
-- If a repo needs backups, add a guardrail that **moves them out automatically**.
-
-## 4) Always preflight directories before writing or mirroring
-- Before creating/mirroring files:
-  - Print paths (repo, save root, target mirror)
-  - Ensure folders exist
-  - Avoid writing to Desktop/root unless explicitly intended
-
-## 5) When counting pipeline output, force arrays
-- Some pipelines can yield a single object rather than a collection.
-- If you rely on `.Count`, always wrap:
-  - `$x = @( ...pipeline... )`
-
-## 6) Run scripts in the foreground during verification
-- Use `& .\path\script.ps1`
-- Avoid `Start-Job` unless you truly need it (it complicates troubleshooting).
-
-## 7) Guardrails should be self-healing
-- If a known-bad pattern appears (e.g. backups in repo), scripts should:
-  - detect it,
-  - move/archive it,
-  - enforce retention.
-
-## 8) Stop-Job in PS7: don’t assume `-Force`
-- PowerShell 7 may not support `Stop-Job -Force` in your environment.
-- Use:
-  - `Get-Job | Stop-Job -ErrorAction SilentlyContinue`
-  - then `Get-Job | Remove-Job -Force -ErrorAction SilentlyContinue`
+Last updated: 2026-02-09
