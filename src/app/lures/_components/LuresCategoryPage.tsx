@@ -15,11 +15,7 @@ function StatusPill({ s }: { s: "owned" | "wishlist" }) {
       ? "bg-emerald-100 text-emerald-900 border-emerald-200"
       : "bg-amber-100 text-amber-900 border-amber-200";
   const label = s === "owned" ? "Owned" : "Wishlist";
-  return (
-    <span className={`inline-flex items-center px-2 py-0.5 text-xs border rounded ${cls}`}>
-      {label}
-    </span>
-  );
+  return <span className={`inline-flex items-center px-2 py-0.5 text-xs border rounded ${cls}`}>{label}</span>;
 }
 
 function TypePill({ label }: { label: string }) {
@@ -80,6 +76,8 @@ export function LuresCategoryPage({
           { href: "/rods", label: "Rods" },
           { href: "/reels", label: "Reels" },
           { href: "/combos", label: "Combos" },
+          { href: "/shopping", label: "Shopping" },
+          { href: "/manufacturers", label: "Manufacturers" },
         ]}
       />
 
@@ -117,21 +115,13 @@ export function LuresCategoryPage({
         {owned.length === 0 ? (
           <div className="border rounded p-4 text-sm text-gray-700 bg-white">None marked owned yet.</div>
         ) : (
-          <div className="grid gap-3">
-            {owned.map((x, i) => (
-              <Card key={`o-${i}`} item={x} typeLabel={typeLabel} />
-            ))}
-          </div>
+          <div className="grid gap-3">{owned.map((x, i) => <Card key={`o-${i}`} item={x} typeLabel={typeLabel} />)}</div>
         )}
       </section>
 
       <section className="space-y-3">
         <h2 className="text-lg font-semibold">Wishlist</h2>
-        <div className="grid gap-3">
-          {wishlist.map((x, i) => (
-            <Card key={`w-${i}`} item={x} typeLabel={typeLabel} />
-          ))}
-        </div>
+        <div className="grid gap-3">{wishlist.map((x, i) => <Card key={`w-${i}`} item={x} typeLabel={typeLabel} />)}</div>
       </section>
     </main>
   );
