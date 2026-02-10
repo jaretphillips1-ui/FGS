@@ -9,6 +9,8 @@ import { SpecChip } from "@/components/SpecChip";
 type AnyRecord = Record<string, unknown>;
 const TABLE = "gear_items";
 
+type StatusFilter = "all" | "owned" | "wishlist" | "other";
+
 function errMsg(e: unknown, fallback: string) {
   if (e instanceof Error) return e.message || fallback;
   if (typeof e === "string") return e || fallback;
@@ -63,10 +65,7 @@ function shortId(id: string): string {
 
 async function copyToClipboard(text: string): Promise<boolean> {
   try {
-    if (
-      navigator.clipboard &&
-      typeof navigator.clipboard.writeText === "function"
-    ) {
+    if (navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
       await navigator.clipboard.writeText(text);
       return true;
     }
@@ -103,18 +102,12 @@ function statusOf(r: AnyRecord): string {
 
 function statusBadge(st: string) {
   if (st === "owned") return { label: "Owned", cls: "bg-black text-white" };
-  if (st === "wishlist")
-    return { label: "Wishlist", cls: "bg-purple-600 text-white" };
+  if (st === "wishlist") return { label: "Wishlist", cls: "bg-purple-600 text-white" };
   if (!st) return { label: "Other", cls: "bg-gray-200 text-gray-800" };
   return { label: st, cls: "bg-gray-200 text-gray-800" };
 }
 
-type SortKey =
-  | "created_desc"
-  | "name_asc"
-  | "brand_asc"
-  | "model_asc"
-  | "status_asc";
+type SortKey = "created_desc" | "name_asc" | "brand_asc" | "model_asc" | "status_asc";
 
 function cmpText(a: unknown, b: unknown) {
   const as = String(a ?? "").trim().toLowerCase();
@@ -133,9 +126,7 @@ export default function ReelsPage() {
 
   // UI controls
   const [q, setQ] = useState("");
-  const [statusFilter, setStatusFilter] = useState<
-    "all" | "owned" | "wishlist" | "other"
-  >("all");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [sortKey, setSortKey] = useState<SortKey>("created_desc");
   const [showIds, setShowIds] = useState(false);
 
@@ -234,23 +225,11 @@ export default function ReelsPage() {
       if (sortKey === "created_desc") return byCreatedDesc(a, b);
       if (sortKey === "name_asc") return cmpText(a.name, b.name);
       if (sortKey === "brand_asc")
-        return (
-          cmpText(a.brand, b.brand) ||
-          cmpText(a.model, b.model) ||
-          cmpText(a.name, b.name)
-        );
+        return cmpText(a.brand, b.brand) || cmpText(a.model, b.model) || cmpText(a.name, b.name);
       if (sortKey === "model_asc")
-        return (
-          cmpText(a.model, b.model) ||
-          cmpText(a.brand, b.brand) ||
-          cmpText(a.name, b.name)
-        );
+        return cmpText(a.model, b.model) || cmpText(a.brand, b.brand) || cmpText(a.name, b.name);
       if (sortKey === "status_asc")
-        return (
-          cmpText(statusOf(a), statusOf(b)) ||
-          cmpText(a.brand, b.brand) ||
-          cmpText(a.model, b.model)
-        );
+        return cmpText(statusOf(a), statusOf(b)) || cmpText(a.brand, b.brand) || cmpText(a.model, b.model);
       return 0;
     });
 
@@ -285,9 +264,7 @@ export default function ReelsPage() {
         </div>
       </div>
 
-      {err && (
-        <div className="border rounded p-3 bg-red-50 text-red-800">{err}</div>
-      )}
+      {err && <div className="border rounded p-3 bg-red-50 text-red-800">{err}</div>}
 
       <div className="border rounded p-4 space-y-3">
         <div className="flex flex-wrap items-center gap-3">
@@ -302,7 +279,7 @@ export default function ReelsPage() {
           <select
             className="border rounded px-2 py-2 text-sm"
             value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value as any)}
+            onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
             aria-label="Filter by status"
             title="Filter by status"
           >
@@ -327,11 +304,7 @@ export default function ReelsPage() {
           </select>
 
           <label className="flex items-center gap-2 text-sm select-none">
-            <input
-              type="checkbox"
-              checked={showIds}
-              onChange={(e) => setShowIds(e.target.checked)}
-            />
+            <input type="checkbox" checked={showIds} onChange={(e) => setShowIds(e.target.checked)} />
             Show IDs
           </label>
         </div>
@@ -342,9 +315,7 @@ export default function ReelsPage() {
       </div>
 
       {filteredSorted.length === 0 ? (
-        <div className="border rounded p-4 text-sm text-gray-600">
-          No reels match your filters.
-        </div>
+        <div className="border rounded p-4 text-sm text-gray-600">No reels match your filters.</div>
       ) : (
         <div className="grid gap-3">
           {filteredSorted.map((r) => {
@@ -372,9 +343,7 @@ export default function ReelsPage() {
               <Link
                 key={id}
                 href={`/reels/${id}`}
-                className={`border rounded p-4 hover:bg-gray-50 block ${
-                  inCombo ? "opacity-[0.92]" : ""
-                }`}
+                className={`border rounded p-4 hover:bg-gray-50 block ${inCombo ? "opacity-[0.92]" : ""}`}
                 title={id}
               >
                 <div className="flex items-start justify-between gap-3">
@@ -382,10 +351,7 @@ export default function ReelsPage() {
                     <div className="flex items-center gap-2 flex-wrap">
                       <div className="font-medium truncate">{name}</div>
 
-                      <span
-                        className={`text-xs px-2 py-0.5 rounded ${badge.cls}`}
-                        title="Status"
-                      >
+                      <span className={`text-xs px-2 py-0.5 rounded ${badge.cls}`} title="Status">
                         {badge.label}
                       </span>
 
@@ -399,16 +365,10 @@ export default function ReelsPage() {
                       ) : null}
                     </div>
 
-                    {brandModel ? (
-                      <div className="text-sm text-gray-600 truncate">
-                        {brandModel}
-                      </div>
-                    ) : null}
+                    {brandModel ? <div className="text-sm text-gray-600 truncate">{brandModel}</div> : null}
 
                     <div className="mt-1 flex items-center gap-2 text-xs text-gray-500">
-                      {showIds ? (
-                        <span className="select-none">ID: {idShort}</span>
-                      ) : null}
+                      {showIds ? <span className="select-none">ID: {idShort}</span> : null}
 
                       <button
                         type="button"
@@ -420,11 +380,7 @@ export default function ReelsPage() {
                           if (!ok) return;
 
                           setCopiedId(id);
-                          window.setTimeout(
-                            () =>
-                              setCopiedId((cur) => (cur === id ? null : cur)),
-                            900
-                          );
+                          window.setTimeout(() => setCopiedId((cur) => (cur === id ? null : cur)), 900);
                         }}
                         title="Copy full ID"
                         aria-label="Copy full reel ID"

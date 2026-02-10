@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import type { PostgrestError } from "@supabase/supabase-js";
 
 type AnyRow = Record<string, unknown>;
 type ComboRow = {
@@ -52,6 +53,11 @@ function toSortText(v: unknown) {
   return String(v ?? "").trim().toLowerCase();
 }
 
+function isUniqueViolation(err: PostgrestError) {
+  // Postgres unique_violation = 23505
+  return err.code === "23505";
+}
+
 export default function CombosPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -69,9 +75,9 @@ export default function CombosPage() {
   const [onlyAvailable, setOnlyAvailable] = useState(false);
 
   // Combo list filter
-  const [comboFilter, setComboFilter] = useState<
-    "all" | "active" | "wishlist"
-  >("all");
+  const [comboFilter, setComboFilter] = useState<"all" | "active" | "wishlist">(
+    "all"
+  );
 
   const [ownerId, setOwnerId] = useState<string>("");
 
@@ -182,8 +188,7 @@ export default function CombosPage() {
     if (rodId && !allowedRods.some((r) => String(r.id) === rodId)) setRodId("");
     if (reelId && !allowedReels.some((r) => String(r.id) === reelId))
       setReelId("");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [includeWishlist, onlyAvailable, rods, reels, combos]);
+  }, [rodId, reelId, allowedRods, allowedReels]);
 
   const selectedRod = useMemo(
     () => rods.find((r) => String(r.id) === rodId) ?? null,
@@ -231,7 +236,7 @@ export default function CombosPage() {
     });
 
     if (error) {
-      if ((error as any).code === "23505") {
+      if (isUniqueViolation(error)) {
         setErr("That rod + reel combo already exists.");
       } else {
         setErr(error.message);
@@ -261,29 +266,33 @@ export default function CombosPage() {
     setCombos((c) => c.filter((x) => x.id !== id));
   }
 
-  function comboParts(c: ComboRow) {
-    const rod = rods.find((r) => String(r.id) === c.rod_id) ?? null;
-    const reel = reels.find((r) => String(r.id) === c.reel_id) ?? null;
+  const comboParts = useCallback(
+    (c: ComboRow) => {
+      const rod = rods.find((r) => String(r.id) === c.rod_id) ?? null;
+      const reel = reels.find((r) => String(r.id) === c.reel_id) ?? null;
 
-    const rodPrimary = rod ? primaryName(rod, "Rod") : "Rod";
-    const reelPrimary = reel ? primaryName(reel, "Reel") : "Reel";
+      const rodPrimary = rod ? primaryName(rod, "Rod") : "Rod";
+      const reelPrimary = reel ? primaryName(reel, "Reel") : "Reel";
 
-    const rodSecondary = rod ? secondaryName(rod) : null;
-    const reelSecondary = reel ? secondaryName(reel) : null;
+      const rodSecondary = rod ? secondaryName(rod) : null;
+      const reelSecondary = reel ? secondaryName(reel) : null;
 
-    const rodStatus = normalizeStatus(rod?.status);
-    const reelStatus = normalizeStatus(reel?.status);
+      const rodStatus = normalizeStatus(rod?.status);
+      const reelStatus = normalizeStatus(reel?.status);
 
-    const isWishlistCombo = rodStatus === "wishlist" || reelStatus === "wishlist";
+      const isWishlistCombo =
+        rodStatus === "wishlist" || reelStatus === "wishlist";
 
-    return {
-      rodPrimary,
-      reelPrimary,
-      rodSecondary,
-      reelSecondary,
-      isWishlistCombo,
-    };
-  }
+      return {
+        rodPrimary,
+        reelPrimary,
+        rodSecondary,
+        reelSecondary,
+        isWishlistCombo,
+      };
+    },
+    [rods, reels]
+  );
 
   const combosView = useMemo(() => {
     // classify + sort: Active first, Wishlist second, then alphabetical
@@ -320,7 +329,7 @@ export default function CombosPage() {
     });
 
     return filtered;
-  }, [combos, rods, reels, comboFilter]);
+  }, [combos, comboFilter, comboParts]);
 
   const counts = useMemo(() => {
     let active = 0;
@@ -331,7 +340,7 @@ export default function CombosPage() {
       else active++;
     }
     return { active, wishlist };
-  }, [combos, rods, reels]);
+  }, [combos, comboParts]);
 
   if (loading) return <main className="p-6">Loading…</main>;
 
