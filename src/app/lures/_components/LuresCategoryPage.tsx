@@ -1,5 +1,7 @@
+import Link from "next/link";
 import { SourceLink } from "@/components/SourceLink";
 import { SectionHeader } from "@/components/SectionHeader";
+import type { LureSubgroup } from "@/lib/lureTaxonomy";
 
 export type SeedItem = {
   brand?: string;
@@ -50,21 +52,34 @@ function Card({ item, typeLabel }: { item: SeedItem; typeLabel: string }) {
   );
 }
 
+function SubgroupCard({ g }: { g: LureSubgroup }) {
+  return (
+    <div className="border rounded p-4 bg-white">
+      <div className="font-medium">{g.title}</div>
+      {g.subtitle ? <div className="text-sm text-gray-600 mt-1">{g.subtitle}</div> : null}
+    </div>
+  );
+}
+
 export function LuresCategoryPage({
   title,
   subtitle,
   typeLabel,
   sources,
+  subgroups,
   items,
 }: {
   title: string;
   subtitle: string;
   typeLabel: string;
   sources?: { href: string; label?: string }[] | null;
+  subgroups?: LureSubgroup[] | null;
   items: SeedItem[];
 }) {
   const owned = items.filter((x) => x.status === "owned");
   const wishlist = items.filter((x) => x.status === "wishlist");
+
+  const sortedSubgroups = (subgroups ?? []).slice().sort((a, b) => a.title.localeCompare(b.title));
 
   return (
     <main className="max-w-5xl mx-auto p-6 space-y-6">
@@ -77,9 +92,24 @@ export function LuresCategoryPage({
           { href: "/reels", label: "Reels" },
           { href: "/combos", label: "Combos" },
           { href: "/shopping", label: "Shopping" },
+          { href: "/inventory", label: "Inventory" },
           { href: "/manufacturers", label: "Manufacturers" },
         ]}
       />
+
+      {sortedSubgroups.length > 0 ? (
+        <section className="space-y-3">
+          <div className="flex items-baseline justify-between">
+            <h2 className="text-lg font-semibold">Sub-groups</h2>
+            <div className="text-xs text-gray-500">{sortedSubgroups.length}</div>
+          </div>
+          <div className="grid sm:grid-cols-2 gap-3">
+            {sortedSubgroups.map((g) => (
+              <SubgroupCard key={g.key} g={g} />
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       {sources && sources.length > 0 ? (
         <div className="flex flex-wrap gap-2 text-xs text-gray-700">
@@ -123,6 +153,11 @@ export function LuresCategoryPage({
         <h2 className="text-lg font-semibold">Wishlist</h2>
         <div className="grid gap-3">{wishlist.map((x, i) => <Card key={`w-${i}`} item={x} typeLabel={typeLabel} />)}</div>
       </section>
+
+      <footer className="text-xs text-gray-500 pt-1">
+        Rule reminder: UX uses only <span className="font-medium">Owned</span> and{" "}
+        <span className="font-medium">Wishlist</span>.
+      </footer>
     </main>
   );
 }

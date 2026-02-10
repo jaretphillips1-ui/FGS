@@ -1,4 +1,5 @@
 import { LuresCategoryPage, type SeedItem } from "../_components/LuresCategoryPage";
+import { LURE_TAXONOMY } from "@/lib/lureTaxonomy";
 
 const ITEMS: SeedItem[] = [
   { model: "Casting Jigs", notes: "Later: weights + trailers + skirt colors.", status: "wishlist" },
@@ -12,6 +13,7 @@ export default function Page() {
       title="Lures"
       subtitle="Jigs — type-first. Then we add weights, trailers, and technique tie-ins."
       typeLabel="Jigs"
+      subgroups={LURE_TAXONOMY.jigs}
       items={ITEMS}
     />
   );

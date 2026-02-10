@@ -1,4 +1,5 @@
 import { LuresCategoryPage, type SeedItem } from "../_components/LuresCategoryPage";
+import { LURE_TAXONOMY } from "@/lib/lureTaxonomy";
 
 const SOURCES = { spro: "https://www.spro.com/" };
 
@@ -20,6 +21,7 @@ export default function Page() {
       title="Lures"
       subtitle="Topwater — type-first. Later: exact models, colors, and hook upgrades."
       typeLabel="Topwater"
+      subgroups={LURE_TAXONOMY.topwater}
       sources={[{ href: SOURCES.spro, label: "SPRO" }]}
       items={ITEMS}
     />

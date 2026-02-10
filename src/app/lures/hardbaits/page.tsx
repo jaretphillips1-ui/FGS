@@ -1,4 +1,5 @@
 import { LuresCategoryPage, type SeedItem } from "../_components/LuresCategoryPage";
+import { LURE_TAXONOMY } from "@/lib/lureTaxonomy";
 
 const SOURCES = {
   rapalaUS: "https://www.rapala.com/us_en/rapala",
@@ -46,6 +47,7 @@ export default function Page() {
       title="Lures"
       subtitle="Hard baits — organized by type first. Depth and brand filters come next."
       typeLabel="Hard Baits"
+      subgroups={LURE_TAXONOMY.hardbaits}
       sources={[
         { href: SOURCES.rapalaUS, label: "Rapala (US) Hub" },
         { href: SOURCES.jackall, label: "Jackall" },

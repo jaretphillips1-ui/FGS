@@ -1,4 +1,5 @@
 import { LuresCategoryPage, type SeedItem } from "../_components/LuresCategoryPage";
+import { LURE_TAXONOMY } from "@/lib/lureTaxonomy";
 
 const SOURCES = {
   zoom: "https://zoombait.com/",
@@ -52,6 +53,7 @@ export default function Page() {
       title="Lures"
       subtitle="Soft plastics — type-first. Brand filter comes after we lock the taxonomy."
       typeLabel="Soft Plastics"
+      subgroups={LURE_TAXONOMY["soft-plastics"]}
       sources={[
         { href: SOURCES.missileSpunkShad, label: "Missile Baits – Spunk Shad" },
         { href: SOURCES.zoom, label: "Zoom" },
