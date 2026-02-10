@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
 import RodsListClient from "./RodsListClient";
@@ -151,6 +151,17 @@ function StatusBadge({
   );
 }
 
+function ComboBadge() {
+  return (
+    <span
+      className="text-xs px-2 py-0.5 rounded bg-amber-100 text-amber-900 border border-amber-200"
+      title="This rod is used in a combo"
+    >
+      Combo
+    </span>
+  );
+}
+
 function formatBrandModel(brand?: string | null, model?: string | null): string | null {
   const b = String(brand ?? "").trim();
   const m = String(model ?? "").trim();
@@ -240,6 +251,9 @@ export default function RodLockerPage() {
   // Track which row IDs are currently being toggled (prevents double clicks)
   const [toggling, setToggling] = useState<Record<string, boolean>>({});
 
+  // Combo awareness (for chips)
+  const [usedRodIds, setUsedRodIds] = useState<Set<string>>(new Set());
+
   // Display-only controls (client-side filter + sort)
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [sortKey, setSortKey] = useState<SortKey>("brand");
@@ -281,6 +295,7 @@ export default function RodLockerPage() {
           setAuthState("signed_out");
           setUserEmail(null);
           setRows([]);
+          setUsedRodIds(new Set());
         }
         return;
       }
@@ -290,23 +305,48 @@ export default function RodLockerPage() {
         setUserEmail(user.email ?? null);
       }
 
-      const queryRes = await hardTimeout(
-        supabase
-          .from("gear_items")
-          .select("id,name,brand,model,status,created_at,rod_techniques")
-          .eq("gear_type", "rod")
-          .order("created_at", { ascending: false }),
-        8000,
-        "gear_items select"
-      );
+      const [rodsRes, combosRes] = await Promise.all([
+        hardTimeout(
+          supabase
+            .from("gear_items")
+            .select("id,name,brand,model,status,created_at,rod_techniques")
+            .eq("gear_type", "rod")
+            .eq("owner_id", user.id)
+            .order("created_at", { ascending: false }),
+          8000,
+          "gear_items select"
+        ),
+        hardTimeout(
+          supabase
+            .from("combos")
+            .select("rod_id")
+            .eq("owner_id", user.id)
+            .order("created_at", { ascending: false }),
+          8000,
+          "combos select"
+        ),
+      ]);
 
-      if (queryRes.error) {
-        if (seq === loadSeq.current) setErr(queryRes.error.message);
+      if (rodsRes.error) {
+        if (seq === loadSeq.current) setErr(rodsRes.error.message);
+        return;
+      }
+      if (combosRes.error) {
+        if (seq === loadSeq.current) setErr(combosRes.error.message);
         return;
       }
 
+      const nextRows = (rodsRes.data ?? []) as RodRow[];
+
+      const nextUsed = new Set<string>();
+      for (const c of (combosRes.data ?? []) as Record<string, unknown>[]) {
+        const rid = String(c.rod_id ?? "");
+        if (rid) nextUsed.add(rid);
+      }
+
       if (seq === loadSeq.current) {
-        setRows((queryRes.data ?? []) as RodRow[]);
+        setRows(nextRows);
+        setUsedRodIds(nextUsed);
       }
     } catch (e: unknown) {
       if (seq === loadSeq.current) {
@@ -380,6 +420,8 @@ export default function RodLockerPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const counts = useMemo(() => countByStatus(rows), [rows]);
+
   if (initialLoading) return <main className="p-6">Loading…</main>;
 
   if (authState === "unknown") {
@@ -443,8 +485,6 @@ export default function RodLockerPage() {
       </main>
     );
   }
-
-  const counts = countByStatus(rows);
 
   return (
     <main className="p-6">
@@ -527,8 +567,8 @@ export default function RodLockerPage() {
                     >
                       <option value="brand">Brand</option>
                       <option value="name">Name</option>
-                      <option value="created_desc">Created (newest)</option>
-                      <option value="status_owned_first">Status (Owned first)</option>
+                      <option value="created_desc">Created (Newest)</option>
+                      <option value="status_owned_first">Status (Owned First)</option>
                     </select>
                   </label>
 
@@ -554,6 +594,7 @@ export default function RodLockerPage() {
               <ul className="mt-3 space-y-2">
                 {displayRows.map((r) => {
                   const brandModel = formatBrandModel(r.brand, r.model);
+                  const inCombo = usedRodIds.has(String(r.id ?? ""));
 
                   return (
                     <li
@@ -567,7 +608,14 @@ export default function RodLockerPage() {
                           {brandModel ? <div className="text-sm text-gray-600 truncate">{brandModel}</div> : null}
                         </div>
 
-                        <StatusBadge status={r.status} disabled={!!toggling[r.id]} onToggle={() => toggleRodStatus(r)} />
+                        <div className="flex items-center gap-2">
+                          {inCombo ? <ComboBadge /> : null}
+                          <StatusBadge
+                            status={r.status}
+                            disabled={!!toggling[r.id]}
+                            onToggle={() => toggleRodStatus(r)}
+                          />
+                        </div>
                       </div>
 
                       {(() => {
@@ -584,7 +632,6 @@ export default function RodLockerPage() {
                           <div className="mt-1 flex flex-wrap gap-1">
                             {display.map((t) => {
                               const isPrimary = primary && t === primary;
-
                               const cls = techniqueChipClass(isPrimary ? "primary" : "selected", "xs");
 
                               return (

@@ -130,7 +130,7 @@ export default function ReelsPage() {
   const [sortKey, setSortKey] = useState<SortKey>("created_desc");
   const [showIds, setShowIds] = useState(false);
 
-  // availability / combo awareness
+  // combo awareness
   const [usedReelIds, setUsedReelIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
@@ -283,7 +283,7 @@ export default function ReelsPage() {
             aria-label="Filter by status"
             title="Filter by status"
           >
-            <option value="all">All statuses</option>
+            <option value="all">All Statuses</option>
             <option value="owned">Owned</option>
             <option value="wishlist">Wishlist</option>
             <option value="other">Other</option>
@@ -310,7 +310,7 @@ export default function ReelsPage() {
         </div>
 
         <div className="text-xs text-gray-500">
-          Tip: you’ll see an <span className="font-medium">In combo</span> badge when a reel is already paired.
+          Tip: you’ll see a <span className="font-medium">Combo</span> badge when a reel is already paired.
         </div>
       </div>
 
@@ -357,10 +357,10 @@ export default function ReelsPage() {
 
                       {inCombo ? (
                         <span
-                          className="text-xs px-2 py-0.5 rounded bg-amber-100 text-amber-900"
-                          title="This reel is already used in an active combo"
+                          className="text-xs px-2 py-0.5 rounded bg-amber-100 text-amber-900 border border-amber-200"
+                          title="This reel is used in a combo"
                         >
-                          In combo
+                          Combo
                         </span>
                       ) : null}
                     </div>

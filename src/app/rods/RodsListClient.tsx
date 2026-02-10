@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { ROD_TECHNIQUES, techniqueChipClass } from "@/lib/rodTechniques";
+import { ROD_TECHNIQUES, canonicalizeTechnique, sortTechniques, techniqueChipClass } from "@/lib/rodTechniques";
 
 export type RodRowLike = {
   id: string;
@@ -19,26 +19,35 @@ export type RodRowLike = {
 
 function coerceTechniques(input: unknown): string[] {
   if (input == null) return [];
-  if (Array.isArray(input)) return input.map((v) => String(v)).filter(Boolean);
 
-  if (typeof input === "string") {
+  let raw: string[] = [];
+
+  if (Array.isArray(input)) {
+    raw = input.map((v) => String(v));
+  } else if (typeof input === "string") {
     const s = input.trim();
     if (!s) return [];
 
     if (s.startsWith("[") && s.endsWith("]")) {
       try {
         const parsed: unknown = JSON.parse(s);
-        if (Array.isArray(parsed)) return parsed.map((v) => String(v)).filter(Boolean);
+        if (Array.isArray(parsed)) raw = parsed.map((v) => String(v));
       } catch {
         // fall through
       }
     }
 
-    if (s.includes(",")) return s.split(",").map((x) => x.trim()).filter(Boolean);
-    return [s];
+    if (raw.length === 0) {
+      if (s.includes(",")) raw = s.split(",").map((x) => x.trim());
+      else raw = [s];
+    }
   }
 
-  return [];
+  const canon = raw
+    .map((v) => canonicalizeTechnique(String(v ?? "")).trim())
+    .filter(Boolean);
+
+  return sortTechniques(canon);
 }
 
 function getString(sp: ReturnType<typeof useSearchParams>, key: string): string {
@@ -85,6 +94,17 @@ export default function RodsListClient<T extends RodRowLike>({
     setQ((prev) => (prev === urlQ ? prev : urlQ));
     setTechFilter((prev) => (prev === urlTech ? prev : urlTech));
   }, [urlQ, urlTech]);
+
+  const techniqueOptions = React.useMemo(() => {
+    const uniq = Array.from(
+      new Set(
+        (ROD_TECHNIQUES ?? [])
+          .map((t) => canonicalizeTechnique(String(t ?? "")).trim())
+          .filter(Boolean)
+      )
+    );
+    return sortTechniques(uniq);
+  }, []);
 
   const normalizedQ = q.trim().toLowerCase();
   const filtersOn = normalizedQ.length > 0 || techFilter.trim().length > 0;
@@ -150,8 +170,8 @@ export default function RodsListClient<T extends RodRowLike>({
           onChange={(e) => setTechFilter(e.target.value)}
           title="Technique"
         >
-          <option value="">All techniques</option>
-          {ROD_TECHNIQUES.map((t) => (
+          <option value="">All Techniques</option>
+          {techniqueOptions.map((t) => (
             <option key={t} value={t}>
               {t}
             </option>
@@ -178,7 +198,7 @@ export default function RodsListClient<T extends RodRowLike>({
           <span className="opacity-70">Technique:</span>
           <button
             type="button"
-            className={techniqueChipClass("selected","xs")}
+            className={techniqueChipClass("selected", "xs")}
             onClick={() => setTechFilter("")}
             title="Clear technique filter"
           >
