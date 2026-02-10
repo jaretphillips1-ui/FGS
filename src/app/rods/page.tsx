@@ -71,16 +71,16 @@ function isOwnedStatus(status?: string | null): boolean {
 
 function isWishListStatus(status?: string | null): boolean {
   const s = normalizeStatus(status);
-  // DB enum currently uses planned; accept wishlist too if any old rows exist
-  return s === "planned" || s === "wishlist" || s === "wish list" || s === "wish";
+  // Canonical: wishlist. Accept a few legacy values if any exist.
+  return s === "wishlist" || s === "wish list" || s === "wish" || s === "planned";
 }
 
-function statusLabel(status?: string | null): "Owned" | "Wish list" | string | null {
+function statusLabel(status?: string | null): "Owned" | "Wishlist" | string | null {
   const s = normalizeStatus(status);
   if (!s) return null;
 
   if (isOwnedStatus(s)) return "Owned";
-  if (isWishListStatus(s)) return "Wish list";
+  if (isWishListStatus(s)) return "Wishlist";
 
   // Future-proof: show other statuses as Title Case (neutral styling)
   const pretty = s
@@ -92,11 +92,11 @@ function statusLabel(status?: string | null): "Owned" | "Wish list" | string | n
   return pretty || null;
 }
 
-function toggleStatusValue(current?: string | null): "owned" | "planned" | null {
+function toggleStatusValue(current?: string | null): "owned" | "wishlist" | null {
   const s = normalizeStatus(current);
   if (!s) return null;
 
-  if (isOwnedStatus(s)) return "planned";
+  if (isOwnedStatus(s)) return "wishlist";
   if (isWishListStatus(s)) return "owned";
 
   // Unknown status: don't toggle automatically
@@ -143,7 +143,7 @@ function StatusBadge({
         e.stopPropagation();
         if (!disabled) onToggle();
       }}
-      title="Click to toggle Owned ↔ Wish list"
+      title="Click to toggle Owned ↔ Wishlist"
       aria-label="Toggle rod status"
     >
       {label}
@@ -512,7 +512,7 @@ export default function RodLockerPage() {
                     >
                       <option value="all">All</option>
                       <option value="owned">Owned</option>
-                      <option value="wishlist">Wish list</option>
+                      <option value="wishlist">Wishlist</option>
                     </select>
                   </label>
 
@@ -547,7 +547,7 @@ export default function RodLockerPage() {
                 </div>
 
                 <div className="text-sm text-gray-600">
-                  {displayRows.length} / {rows.length} • Owned: {counts.owned} • Wish list: {counts.wish}
+                  {displayRows.length} / {rows.length} • Owned: {counts.owned} • Wishlist: {counts.wish}
                 </div>
               </div>
 
