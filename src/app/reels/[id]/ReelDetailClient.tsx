@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { InputHTMLAttributes } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
-import { REEL_HAND_VALUES, REEL_TYPE_VALUES } from "@/lib/reelSpecs";
+import { REEL_HAND_VALUES, REEL_TYPE_VALUES, normalizeGearRatio } from "@/lib/reelSpecs";
 
 type AnyRecord = Record<string, unknown>;
 const TABLE = "gear_items";
@@ -34,6 +34,55 @@ function deepEqual(a: unknown, b: unknown) {
   return false;
 }
 
+function cleanText(v: unknown): string {
+  return String(v ?? "").trim().replace(/\s+/g, " ");
+}
+
+function toTitle(s: string) {
+  return String(s ?? "")
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (m) => m.toUpperCase());
+}
+
+function normalizeStatus(v: unknown): "owned" | "wishlist" | "other" {
+  const s = cleanText(v).toLowerCase();
+  if (s === "owned") return "owned";
+  if (s === "wishlist" || s === "wish list" || s === "wish" || s === "planned") return "wishlist";
+  return "other";
+}
+
+function shortId(id: string): string {
+  const s = String(id ?? "");
+  if (s.length <= 12) return s;
+  return `${s.slice(0, 4)}…${s.slice(-4)}`;
+}
+
+async function copyToClipboard(text: string): Promise<boolean> {
+  try {
+    if (navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch {
+    // fall through
+  }
+
+  try {
+    const el = document.createElement("textarea");
+    el.value = text;
+    el.setAttribute("readonly", "true");
+    el.style.position = "absolute";
+    el.style.left = "-9999px";
+    document.body.appendChild(el);
+    el.select();
+    const ok = document.execCommand("copy");
+    document.body.removeChild(el);
+    return ok;
+  } catch {
+    return false;
+  }
+}
+
 function numOrNullFromDraft(v: unknown): number | null {
   if (typeof v !== "number") return null;
   return Number.isFinite(v) ? v : null;
@@ -57,9 +106,6 @@ function roundTo(n: number, precision: number) {
   const f = Math.pow(10, p);
   return Math.round(n * f) / f;
 }
-function toTitle(s: string) {
-  return s.replace(/_/g, " ").replace(/\b\w/g, (m) => m.toUpperCase());
-}
 
 function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
   return Promise.race([
@@ -68,6 +114,13 @@ function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
       setTimeout(() => rej(new Error(label + " timed out after " + ms + "ms")), ms)
     ),
   ]);
+}
+
+// Allow catalog_product_id (user-controlled), but block patching other *_id fields by default.
+function shouldIncludeKeyInPatch(key: string): boolean {
+  if (key === "catalog_product_id") return true;
+  if (key.endsWith("_id")) return false;
+  return true;
 }
 
 /** Always-visible steppers: input + dedicated up/down control on the right. */
@@ -87,6 +140,7 @@ function StepperNumber({
   min: number;
   max: number;
   step?: number;
+  precision?: number;
   disabled?: boolean;
   placeholder?: string;
   inputMode?: InputHTMLAttributes<HTMLInputElement>["inputMode"];
@@ -96,21 +150,18 @@ function StepperNumber({
   function commitFromString(s: string) {
     const n = numOrNullFromInput(s);
     if (n == null) return onChange(null);
-    const clamped = clampNum(n, min, max); onChange(precision == null ? clamped : roundTo(clamped, precision));
+    const clamped = clampNum(n, min, max);
+    onChange(precision == null ? clamped : roundTo(clamped, precision));
   }
 
   function bump(dir: 1 | -1) {
     const cur = value == null || !Number.isFinite(value) ? 0 : value;
-    const next = clampNum(cur + dir * step, min, max); onChange(precision == null ? next : roundTo(next, precision));
+    const next = clampNum(cur + dir * step, min, max);
+    onChange(precision == null ? next : roundTo(next, precision));
   }
 
   return (
-    <div
-      className={
-        "flex items-stretch rounded border overflow-hidden bg-white " +
-        (disabled ? "opacity-60" : "")
-      }
-    >
+    <div className={"flex items-stretch rounded border overflow-hidden bg-white " + (disabled ? "opacity-60" : "")}>
       <input
         className="w-full px-3 py-2 text-sm outline-none text-right"
         type="text"
@@ -149,11 +200,8 @@ function StepperNumber({
 
 export default function ReelDetailClient(props: { id?: string }) {
   const router = useRouter();
-
-  // useParams() typing can be awkward; avoid `any` but still safely read "id"
   const params = useParams() as unknown as Record<string, string | string[] | undefined>;
 
-  // Pull id from URL as the source of truth; fall back to prop if present.
   const routeIdRaw = params["id"];
   const routeId = Array.isArray(routeIdRaw) ? routeIdRaw[0] : routeIdRaw;
   const id = String(props.id ?? routeId ?? "").trim();
@@ -168,6 +216,9 @@ export default function ReelDetailClient(props: { id?: string }) {
   const [original, setOriginal] = useState<AnyRecord | null>(null);
   const [draft, setDraft] = useState<AnyRecord | null>(null);
 
+  const [showIds, setShowIds] = useState(false);
+  const [copied, setCopied] = useState(false);
+
   const loadSeq = useRef(0);
 
   const editableKeys = useMemo(() => {
@@ -180,6 +231,8 @@ export default function ReelDetailClient(props: { id?: string }) {
   const renderedKeys = new Set<string>([
     "name",
     "status",
+    "brand",
+    "model",
     "reel_type",
     "reel_hand",
     "reel_gear_ratio",
@@ -214,7 +267,6 @@ export default function ReelDetailClient(props: { id?: string }) {
       setValidationErr(null);
       setSavedMsg(null);
 
-      // Guard: never hit Supabase with undefined/invalid UUID
       if (!id || !UUID_RE.test(id)) {
         setOriginal(null);
         setDraft(null);
@@ -236,7 +288,6 @@ export default function ReelDetailClient(props: { id?: string }) {
           8000,
           "gear_items select"
         );
-
         if (res.error) throw res.error;
 
         const row = (res.data ?? null) as AnyRecord | null;
@@ -266,7 +317,7 @@ export default function ReelDetailClient(props: { id?: string }) {
   async function deleteReel() {
     if (!original) return;
 
-    const name = String(original.name ?? "").trim() || "this reel";
+    const name = cleanText(original.name) || "this reel";
     const ok = window.confirm(`Delete ${name}? This cannot be undone.`);
     if (!ok) return;
 
@@ -284,7 +335,7 @@ export default function ReelDetailClient(props: { id?: string }) {
       }
 
       const res = await withTimeout(
-        supabase.from(TABLE).delete().eq("id", id),
+        supabase.from(TABLE).delete().eq("id", id).eq("owner_id", user.id),
         8000,
         "gear_items delete"
       );
@@ -307,7 +358,7 @@ export default function ReelDetailClient(props: { id?: string }) {
     setValidationErr(null);
     setSavedMsg(null);
 
-    const trimmedName = String(draft.name ?? "").trim();
+    const trimmedName = cleanText(draft.name);
     if (!trimmedName) {
       setSaving(false);
       setValidationErr("Name is required.");
@@ -324,8 +375,21 @@ export default function ReelDetailClient(props: { id?: string }) {
 
       const patch: AnyRecord = {};
       for (const k of editableKeys) {
-        const before = original[k];
-        const after = draft[k];
+        if (!shouldIncludeKeyInPatch(k)) continue;
+
+        let before = original[k];
+        let after = draft[k];
+
+        if (k === "status") {
+          before = normalizeStatus(before);
+          after = normalizeStatus(after);
+        }
+
+        if (k === "reel_gear_ratio") {
+          before = cleanText(before);
+          after = normalizeGearRatio(cleanText(after));
+        }
+
         if (!deepEqual(before, after)) patch[k] = after;
       }
 
@@ -380,14 +444,53 @@ export default function ReelDetailClient(props: { id?: string }) {
     );
   }
 
-  const title = String(draft.name ?? "").trim() || "Reel";
+  const title = cleanText(draft.name) || "Reel";
+  const brandModel = [cleanText(draft.brand), cleanText(draft.model)].filter(Boolean).join(" • ");
+  const status = normalizeStatus(draft.status);
+
+  const typeVal = String((draft as AnyRecord).reel_type ?? "baitcaster");
+  const handVal = String((draft as AnyRecord).reel_hand ?? "right");
+
+  const typeOptions = [...REEL_TYPE_VALUES].sort((a, b) => toTitle(a).localeCompare(toTitle(b)));
+  const handOptions = [...REEL_HAND_VALUES].sort((a, b) => toTitle(a).localeCompare(toTitle(b)));
 
   return (
     <main className="max-w-3xl mx-auto p-6 space-y-4">
       <div className="flex items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold">{title}</h1>
-          <div className="text-sm text-gray-500 break-all">ID: {id}</div>
+        <div className="min-w-0">
+          <h1 className="text-2xl font-semibold truncate">{title}</h1>
+          {brandModel ? <div className="text-sm text-gray-600 truncate">{brandModel}</div> : null}
+
+          <div className="mt-1 flex items-center gap-2 text-xs text-gray-500 flex-wrap">
+            <span className="px-2 py-0.5 rounded border bg-white">
+              Status:{" "}
+              <span className="font-medium">
+                {status === "wishlist" ? "Wishlist" : status === "owned" ? "Owned" : "Other"}
+              </span>
+            </span>
+
+            <label className="flex items-center gap-2 select-none">
+              <input type="checkbox" checked={showIds} onChange={(e) => setShowIds(e.target.checked)} />
+              Show ID
+            </label>
+
+            {showIds ? <span className="select-none">ID: {shortId(id)}</span> : null}
+
+            <button
+              type="button"
+              className="px-2 py-0.5 rounded border bg-white hover:bg-gray-100"
+              onClick={async () => {
+                const ok = await copyToClipboard(id);
+                if (!ok) return;
+                setCopied(true);
+                window.setTimeout(() => setCopied(false), 900);
+              }}
+              title="Copy full ID"
+              aria-label="Copy full reel ID"
+            >
+              {copied ? "Copied" : "Copy ID"}
+            </button>
+          </div>
         </div>
 
         <div className="flex items-center gap-2">
@@ -432,16 +535,38 @@ export default function ReelDetailClient(props: { id?: string }) {
           />
         </label>
 
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <label className="grid gap-1">
+            <div className="text-sm font-medium">Brand</div>
+            <input
+              className="border rounded px-3 py-2"
+              value={String((draft as AnyRecord).brand ?? "")}
+              onChange={(e) => setDraft((d) => ({ ...(d ?? {}), brand: e.target.value }))}
+              placeholder="e.g., Shimano"
+            />
+          </label>
+
+          <label className="grid gap-1">
+            <div className="text-sm font-medium">Model</div>
+            <input
+              className="border rounded px-3 py-2"
+              value={String((draft as AnyRecord).model ?? "")}
+              onChange={(e) => setDraft((d) => ({ ...(d ?? {}), model: e.target.value }))}
+              placeholder="e.g., Curado DC 150HG"
+            />
+          </label>
+        </div>
+
         {"status" in draft && (
           <label className="grid gap-1">
             <div className="text-sm font-medium">Status</div>
             <select
               className="border rounded px-3 py-2"
-              value={String((draft as AnyRecord).status ?? "owned")}
+              value={normalizeStatus((draft as AnyRecord).status)}
               onChange={(e) => setDraft((d) => ({ ...(d ?? {}), status: e.target.value }))}
             >
               <option value="owned">Owned</option>
-              <option value="planned">Wishlist</option>
+              <option value="wishlist">Wishlist</option>
             </select>
           </label>
         )}
@@ -455,12 +580,12 @@ export default function ReelDetailClient(props: { id?: string }) {
             <div className="text-sm font-medium">Type</div>
             <select
               className="border rounded px-3 py-2"
-              value={String((draft as AnyRecord).reel_type ?? "baitcaster")}
+              value={typeVal}
               onChange={(e) => setDraft((d) => ({ ...(d ?? {}), reel_type: e.target.value }))}
             >
-              {REEL_TYPE_VALUES.map((t) => (
+              {typeOptions.map((t) => (
                 <option key={t} value={t}>
-                  {t}
+                  {toTitle(t)}
                 </option>
               ))}
             </select>
@@ -470,12 +595,12 @@ export default function ReelDetailClient(props: { id?: string }) {
             <div className="text-sm font-medium">Hand</div>
             <select
               className="border rounded px-3 py-2"
-              value={String((draft as AnyRecord).reel_hand ?? "right")}
+              value={handVal}
               onChange={(e) => setDraft((d) => ({ ...(d ?? {}), reel_hand: e.target.value }))}
             >
-              {REEL_HAND_VALUES.map((h) => (
+              {handOptions.map((h) => (
                 <option key={h} value={h}>
-                  {h}
+                  {toTitle(h)}
                 </option>
               ))}
             </select>
@@ -514,7 +639,8 @@ export default function ReelDetailClient(props: { id?: string }) {
               min={0}
               max={40}
               step={0.1}
-              precision={1} inputMode="decimal"
+              precision={1}
+              inputMode="decimal"
               placeholder="e.g. 7.8"
             />
           </div>
@@ -558,9 +684,7 @@ export default function ReelDetailClient(props: { id?: string }) {
           <input
             className="border rounded px-3 py-2"
             value={String((draft as AnyRecord).reel_brake_system ?? "")}
-            onChange={(e) =>
-              setDraft((d) => ({ ...(d ?? {}), reel_brake_system: e.target.value }))
-            }
+            onChange={(e) => setDraft((d) => ({ ...(d ?? {}), reel_brake_system: e.target.value }))}
             placeholder="e.g., DC, SV, Magnetic, Centrifugal"
           />
         </label>
