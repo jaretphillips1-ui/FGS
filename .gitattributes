@@ -1,22 +1,31 @@
-# Ensure this file stays LF
-.gitattributes text eol=lf
+# FGS repo: enforce consistent line endings in git, keep Windows-friendly working tree
+* text=auto eol=lf
 
-# Normalize line endings in repo
-* text=auto
+# Windows scripts
+*.ps1 text eol=crlf
+*.cmd text eol=crlf
+*.bat text eol=crlf
 
-# Source files should be LF in repo
-*.ts   text eol=lf
-*.tsx  text eol=lf
-*.js   text eol=lf
-*.jsx  text eol=lf
+# Web / app code (store LF in repo)
+*.ts  text eol=lf
+*.tsx text eol=lf
+*.js  text eol=lf
+*.jsx text eol=lf
+*.mjs text eol=lf
+*.cjs text eol=lf
 *.json text eol=lf
-*.css  text eol=lf
-*.md   text eol=lf
-*.sql  text eol=lf
-*.yml  text eol=lf
+*.css text eol=lf
+*.md  text eol=lf
+*.yml text eol=lf
 *.yaml text eol=lf
+*.html text eol=lf
 
-# Windows scripts should be CRLF
-*.ps1  text eol=crlf
-*.bat  text eol=crlf
-*.cmd  text eol=crlf
+# Common binaries
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.pdf binary
+*.zip binary
