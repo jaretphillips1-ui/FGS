@@ -1,3 +1,5 @@
+import { SourceLink } from "@/components/SourceLink";
+
 const SOURCES = { spro: "https://www.spro.com/" };
 
 type Status = "owned" | "wishlist";
@@ -26,7 +28,7 @@ export default function Page() {
         <h1 className="text-2xl font-semibold">Lures • Topwater</h1>
         <p className="text-sm text-gray-600">Topwater anchors now. Later: exact models, colors, hook swaps.</p>
         <div className="flex flex-wrap gap-2 text-xs text-gray-700">
-          <a className="underline" href={SOURCES.spro} target="_blank" rel="noreferrer">SPRO</a>
+          <SourceLink href={SOURCES.spro} label="SPRO" />
         </div>
       </header>
 
@@ -41,7 +43,7 @@ export default function Page() {
                   <div className="flex items-center gap-2"><Pill>Topwater</Pill><StatusPill s={x.status}/></div>
                 </div>
                 {x.notes ? <div className="text-sm text-gray-700 mt-2">{x.notes}</div> : null}
-                {x.sourceUrl ? <div className="text-xs text-gray-600 mt-2">Source: <a className="underline" href={x.sourceUrl} target="_blank" rel="noreferrer">{x.sourceUrl}</a></div> : null}
+                {x.sourceUrl ? <div className="text-xs text-gray-600 mt-2">Source: <SourceLink href={x.sourceUrl} /></div> : null}
               </div>
             ))}
           </div>
@@ -58,7 +60,7 @@ export default function Page() {
                 <div className="flex items-center gap-2"><Pill>Topwater</Pill><StatusPill s={x.status}/></div>
               </div>
               {x.notes ? <div className="text-sm text-gray-700 mt-2">{x.notes}</div> : null}
-              {x.sourceUrl ? <div className="text-xs text-gray-600 mt-2">Source: <a className="underline" href={x.sourceUrl} target="_blank" rel="noreferrer">{x.sourceUrl}</a></div> : null}
+              {x.sourceUrl ? <div className="text-xs text-gray-600 mt-2">Source: <SourceLink href={x.sourceUrl} /></div> : null}
             </div>
           ))}
         </div>

@@ -1,3 +1,5 @@
+import { SourceLink } from "@/components/SourceLink";
+
 const SOURCES = {
   spro: "https://www.spro.com/",
   rapalaUS: "https://www.rapala.com/us_en/rapala",
@@ -137,46 +139,23 @@ export default function Page() {
         </p>
 
         <div className="flex flex-wrap gap-2 text-xs text-gray-700">
-          <a
-            className="underline"
-            href={SOURCES.missileSpunkShad}
-            target="_blank"
-            rel="noreferrer"
-          >
-            Missile Baits – Spunk Shad 3.0
-          </a>
+          <SourceLink href={SOURCES.missileSpunkShad} label="Missile Baits – Spunk Shad 3.0" />
           <span className="text-gray-400">•</span>
-          <a className="underline" href={SOURCES.keitech} target="_blank" rel="noreferrer">
-            Keitech USA
-          </a>
+          <SourceLink href={SOURCES.keitech} label="Keitech USA" />
           <span className="text-gray-400">•</span>
-          <a className="underline" href={SOURCES.zoom} target="_blank" rel="noreferrer">
-            Zoom
-          </a>
+          <SourceLink href={SOURCES.zoom} label="Zoom" />
           <span className="text-gray-400">•</span>
-          <a className="underline" href={SOURCES.zman} target="_blank" rel="noreferrer">
-            Z-Man
-          </a>
+          <SourceLink href={SOURCES.zman} label="Z-Man" />
           <span className="text-gray-400">•</span>
-          <a className="underline" href={SOURCES.reaction} target="_blank" rel="noreferrer">
-            Reaction Innovations
-          </a>
+          <SourceLink href={SOURCES.reaction} label="Reaction Innovations" />
           <span className="text-gray-400">•</span>
-          <a className="underline" href={SOURCES.rapalaUS} target="_blank" rel="noreferrer">
-            Rapala (US) hub
-          </a>
+          <SourceLink href={SOURCES.rapalaUS} label="Rapala (US) hub" />
           <span className="text-gray-400">•</span>
-          <a className="underline" href={SOURCES.spro} target="_blank" rel="noreferrer">
-            SPRO
-          </a>
+          <SourceLink href={SOURCES.spro} label="SPRO" />
           <span className="text-gray-400">•</span>
-          <a className="underline" href={SOURCES.jackall} target="_blank" rel="noreferrer">
-            Jackall
-          </a>
+          <SourceLink href={SOURCES.jackall} label="Jackall" />
           <span className="text-gray-400">•</span>
-          <a className="underline" href={SOURCES.megabass} target="_blank" rel="noreferrer">
-            Megabass
-          </a>
+          <SourceLink href={SOURCES.megabass} label="Megabass" />
         </div>
       </header>
 
@@ -206,9 +185,7 @@ export default function Page() {
                 {x.sourceUrl ? (
                   <div className="text-xs text-gray-600 mt-2">
                     Source:{" "}
-                    <a className="underline" href={x.sourceUrl} target="_blank" rel="noreferrer">
-                      {x.sourceUrl}
-                    </a>
+                    <SourceLink href={x.sourceUrl} />
                   </div>
                 ) : null}
               </div>
@@ -248,9 +225,7 @@ export default function Page() {
               {x.sourceUrl ? (
                 <div className="text-xs text-gray-600 mt-2">
                   Source:{" "}
-                  <a className="underline" href={x.sourceUrl} target="_blank" rel="noreferrer">
-                    {x.sourceUrl}
-                  </a>
+                  <SourceLink href={x.sourceUrl} />
                 </div>
               ) : null}
             </div>

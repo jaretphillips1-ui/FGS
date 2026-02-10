@@ -1,3 +1,5 @@
+import { SourceLink } from "@/components/SourceLink";
+
 const SOURCES = {
   bkkAmericasCatalog: "https://bkkhooks-americas.com/catalog/",
   owner: "https://www.ownerhooks.com/",
@@ -31,11 +33,11 @@ export default function Page() {
         <h1 className="text-2xl font-semibold">Terminal • Hooks</h1>
         <p className="text-sm text-gray-600">Seeded hook anchors. Next: add sizes, pack counts, hook types.</p>
         <div className="flex flex-wrap gap-2 text-xs text-gray-700">
-          <a className="underline" href={SOURCES.bkkAmericasCatalog} target="_blank" rel="noreferrer">BKK Americas catalog</a>
+          <SourceLink href={SOURCES.bkkAmericasCatalog} label="BKK Americas catalog" />
           <span className="text-gray-400">•</span>
-          <a className="underline" href={SOURCES.owner} target="_blank" rel="noreferrer">Owner</a>
+          <SourceLink href={SOURCES.owner} label="Owner" />
           <span className="text-gray-400">•</span>
-          <a className="underline" href={SOURCES.gamakatsu} target="_blank" rel="noreferrer">Gamakatsu</a>
+          <SourceLink href={SOURCES.gamakatsu} label="Gamakatsu" />
         </div>
       </header>
 
@@ -50,7 +52,7 @@ export default function Page() {
                   <div className="flex items-center gap-2"><Pill>Hooks</Pill><StatusPill s={x.status}/></div>
                 </div>
                 {x.notes ? <div className="text-sm text-gray-700 mt-2">{x.notes}</div> : null}
-                {x.sourceUrl ? <div className="text-xs text-gray-600 mt-2">Source: <a className="underline" href={x.sourceUrl} target="_blank" rel="noreferrer">{x.sourceUrl}</a></div> : null}
+                {x.sourceUrl ? <div className="text-xs text-gray-600 mt-2">Source: <SourceLink href={x.sourceUrl} /></div> : null}
               </div>
             ))}
           </div>
@@ -67,7 +69,7 @@ export default function Page() {
                 <div className="flex items-center gap-2"><Pill>Hooks</Pill><StatusPill s={x.status}/></div>
               </div>
               {x.notes ? <div className="text-sm text-gray-700 mt-2">{x.notes}</div> : null}
-              {x.sourceUrl ? <div className="text-xs text-gray-600 mt-2">Source: <a className="underline" href={x.sourceUrl} target="_blank" rel="noreferrer">{x.sourceUrl}</a></div> : null}
+              {x.sourceUrl ? <div className="text-xs text-gray-600 mt-2">Source: <SourceLink href={x.sourceUrl} /></div> : null}
             </div>
           ))}
         </div>

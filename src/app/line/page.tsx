@@ -1,3 +1,5 @@
+import { SourceLink } from "@/components/SourceLink";
+
 const SOURCES = {
   sunlineLine: "https://sunlineamerica.com/collections/line",
   sufixCanada: "https://www.rapala.ca/ca_en/sufix",
@@ -88,17 +90,11 @@ export default function Page() {
         </p>
 
         <div className="flex flex-wrap gap-2 text-xs text-gray-700">
-          <a className="underline" href={SOURCES.sunlineLine} target="_blank" rel="noreferrer">
-            Sunline line collection
-          </a>
+          <SourceLink href={SOURCES.sunlineLine} label="Sunline line collection" />
           <span className="text-gray-400">•</span>
-          <a className="underline" href={SOURCES.sufixCanada} target="_blank" rel="noreferrer">
-            Sufix (Rapala Canada)
-          </a>
+          <SourceLink href={SOURCES.sufixCanada} label="Sufix (Rapala Canada)" />
           <span className="text-gray-400">•</span>
-          <a className="underline" href={SOURCES.rapalaUS} target="_blank" rel="noreferrer">
-            Rapala (US) brand hub
-          </a>
+          <SourceLink href={SOURCES.rapalaUS} label="Rapala (US) brand hub" />
         </div>
       </header>
 
@@ -125,9 +121,7 @@ export default function Page() {
                 {x.sourceUrl ? (
                   <div className="text-xs text-gray-600 mt-2">
                     Source:{" "}
-                    <a className="underline" href={x.sourceUrl} target="_blank" rel="noreferrer">
-                      {x.sourceUrl}
-                    </a>
+                    <SourceLink href={x.sourceUrl} />
                   </div>
                 ) : null}
               </div>
@@ -165,9 +159,7 @@ export default function Page() {
               {x.sourceUrl ? (
                 <div className="text-xs text-gray-600 mt-2">
                   Source:{" "}
-                  <a className="underline" href={x.sourceUrl} target="_blank" rel="noreferrer">
-                    {x.sourceUrl}
-                  </a>
+                  <SourceLink href={x.sourceUrl} />
                 </div>
               ) : null}
             </div>

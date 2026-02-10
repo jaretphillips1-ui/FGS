@@ -1,3 +1,5 @@
+import { SourceLink } from "@/components/SourceLink";
+
 const SOURCES = {
   bkk: "https://bkkhooks.com/",
   bkkAmericasCatalog: "https://bkkhooks-americas.com/catalog/",
@@ -81,21 +83,13 @@ export default function Page() {
         </p>
 
         <div className="flex flex-wrap gap-2 text-xs text-gray-700">
-          <a className="underline" href={SOURCES.bkk} target="_blank" rel="noreferrer">
-            BKK (global)
-          </a>
+          <SourceLink href={SOURCES.bkk} label="BKK (global)" />
           <span className="text-gray-400">•</span>
-          <a className="underline" href={SOURCES.bkkAmericasCatalog} target="_blank" rel="noreferrer">
-            BKK Americas catalog
-          </a>
+          <SourceLink href={SOURCES.bkkAmericasCatalog} label="BKK Americas catalog" />
           <span className="text-gray-400">•</span>
-          <a className="underline" href={SOURCES.owner} target="_blank" rel="noreferrer">
-            Owner Hooks
-          </a>
+          <SourceLink href={SOURCES.owner} label="Owner Hooks" />
           <span className="text-gray-400">•</span>
-          <a className="underline" href={SOURCES.gamakatsu} target="_blank" rel="noreferrer">
-            Gamakatsu
-          </a>
+          <SourceLink href={SOURCES.gamakatsu} label="Gamakatsu" />
         </div>
       </header>
 
@@ -122,9 +116,7 @@ export default function Page() {
                 {x.sourceUrl ? (
                   <div className="text-xs text-gray-600 mt-2">
                     Source:{" "}
-                    <a className="underline" href={x.sourceUrl} target="_blank" rel="noreferrer">
-                      {x.sourceUrl}
-                    </a>
+                    <SourceLink href={x.sourceUrl} />
                   </div>
                 ) : null}
               </div>
@@ -162,9 +154,7 @@ export default function Page() {
               {x.sourceUrl ? (
                 <div className="text-xs text-gray-600 mt-2">
                   Source:{" "}
-                  <a className="underline" href={x.sourceUrl} target="_blank" rel="noreferrer">
-                    {x.sourceUrl}
-                  </a>
+                  <SourceLink href={x.sourceUrl} />
                 </div>
               ) : null}
             </div>

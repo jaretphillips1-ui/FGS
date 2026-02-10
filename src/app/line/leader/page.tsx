@@ -1,3 +1,5 @@
+import { SourceLink } from "@/components/SourceLink";
+
 type Status = "owned" | "wishlist";
 type Item = { brand: string; model: string; notes?: string; status: Status; sourceUrl?: string };
 
@@ -25,7 +27,7 @@ export default function Page() {
         <h1 className="text-2xl font-semibold">Line • Leader</h1>
         <p className="text-sm text-gray-600">Leader materials and anchors. Later: lb tests, leader length presets, knots.</p>
         <div className="flex flex-wrap gap-2 text-xs text-gray-700">
-          <a className="underline" href={SOURCES.sufixCanada} target="_blank" rel="noreferrer">Sufix (Rapala Canada)</a>
+          <SourceLink href={SOURCES.sufixCanada} label="Sufix (Rapala Canada)" />
         </div>
       </header>
 
@@ -40,7 +42,7 @@ export default function Page() {
                   <div className="flex items-center gap-2"><Pill>Leader</Pill><StatusPill s={x.status}/></div>
                 </div>
                 {x.notes ? <div className="text-sm text-gray-700 mt-2">{x.notes}</div> : null}
-                {x.sourceUrl ? <div className="text-xs text-gray-600 mt-2">Source: <a className="underline" href={x.sourceUrl} target="_blank" rel="noreferrer">{x.sourceUrl}</a></div> : null}
+                {x.sourceUrl ? <div className="text-xs text-gray-600 mt-2">Source: <SourceLink href={x.sourceUrl} /></div> : null}
               </div>
             ))}
           </div>
@@ -57,7 +59,7 @@ export default function Page() {
                 <div className="flex items-center gap-2"><Pill>Leader</Pill><StatusPill s={x.status}/></div>
               </div>
               {x.notes ? <div className="text-sm text-gray-700 mt-2">{x.notes}</div> : null}
-              {x.sourceUrl ? <div className="text-xs text-gray-600 mt-2">Source: <a className="underline" href={x.sourceUrl} target="_blank" rel="noreferrer">{x.sourceUrl}</a></div> : null}
+              {x.sourceUrl ? <div className="text-xs text-gray-600 mt-2">Source: <SourceLink href={x.sourceUrl} /></div> : null}
             </div>
           ))}
         </div>

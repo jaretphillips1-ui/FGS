@@ -1,3 +1,5 @@
+import { SourceLink } from "@/components/SourceLink";
+
 const SOURCES = {
   zoom: "https://zoombait.com/",
   keitech: "https://www.keitechusa.com/",
@@ -34,15 +36,15 @@ export default function Page() {
         <h1 className="text-2xl font-semibold">Lures • Soft Plastics</h1>
         <p className="text-sm text-gray-600">Seeded plastics so this category is instantly “real”.</p>
         <div className="flex flex-wrap gap-2 text-xs text-gray-700">
-          <a className="underline" href={SOURCES.missileSpunkShad} target="_blank" rel="noreferrer">Missile Baits – Spunk Shad</a>
+          <SourceLink href={SOURCES.missileSpunkShad} label="Missile Baits – Spunk Shad" />
           <span className="text-gray-400">•</span>
-          <a className="underline" href={SOURCES.zoom} target="_blank" rel="noreferrer">Zoom</a>
+          <SourceLink href={SOURCES.zoom} label="Zoom" />
           <span className="text-gray-400">•</span>
-          <a className="underline" href={SOURCES.keitech} target="_blank" rel="noreferrer">Keitech</a>
+          <SourceLink href={SOURCES.keitech} label="Keitech" />
           <span className="text-gray-400">•</span>
-          <a className="underline" href={SOURCES.zman} target="_blank" rel="noreferrer">Z-Man</a>
+          <SourceLink href={SOURCES.zman} label="Z-Man" />
           <span className="text-gray-400">•</span>
-          <a className="underline" href={SOURCES.reaction} target="_blank" rel="noreferrer">Reaction Innovations</a>
+          <SourceLink href={SOURCES.reaction} label="Reaction Innovations" />
         </div>
       </header>
 
@@ -57,7 +59,7 @@ export default function Page() {
                   <div className="flex items-center gap-2"><Pill>Soft Plastic</Pill><StatusPill s={x.status}/></div>
                 </div>
                 {x.notes ? <div className="text-sm text-gray-700 mt-2">{x.notes}</div> : null}
-                {x.sourceUrl ? <div className="text-xs text-gray-600 mt-2">Source: <a className="underline" href={x.sourceUrl} target="_blank" rel="noreferrer">{x.sourceUrl}</a></div> : null}
+                {x.sourceUrl ? <div className="text-xs text-gray-600 mt-2">Source: <SourceLink href={x.sourceUrl} /></div> : null}
               </div>
             ))}
           </div>
@@ -74,7 +76,7 @@ export default function Page() {
                 <div className="flex items-center gap-2"><Pill>Soft Plastic</Pill><StatusPill s={x.status}/></div>
               </div>
               {x.notes ? <div className="text-sm text-gray-700 mt-2">{x.notes}</div> : null}
-              {x.sourceUrl ? <div className="text-xs text-gray-600 mt-2">Source: <a className="underline" href={x.sourceUrl} target="_blank" rel="noreferrer">{x.sourceUrl}</a></div> : null}
+              {x.sourceUrl ? <div className="text-xs text-gray-600 mt-2">Source: <SourceLink href={x.sourceUrl} /></div> : null}
             </div>
           ))}
         </div>
