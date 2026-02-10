@@ -11,6 +11,10 @@ const SEED_TOOLBOX: ToolboxItem[] = [
   { name: "Split-ring pliers", category: "tools", notes: "Small split rings, trebles, and hardware work.", status: "wishlist" },
   { name: "Line scissors / braid cutters", category: "tools", notes: "Dedicated braid cutter helps keep cuts clean.", status: "wishlist" },
   { name: "Forceps / hook remover", category: "tools", notes: "Pickerel-friendly and safer unhooking.", status: "wishlist" },
+
+  // Added (extra hook-out coverage)
+  { name: "Long-nose pliers (hook-out tool)", category: "tools", notes: "Good leverage for deeper hooks + safer unhooking.", status: "wishlist" },
+
   { name: "Terminal organizer box (small compartments)", category: "organizers", notes: "Hooks, weights, swivels, snaps.", status: "wishlist" },
   { name: "Soft plastics binder / gallon zip storage", category: "storage", notes: "Keeps packs organized by style (worms, flukes, creatures).", status: "wishlist" },
   { name: "Super glue + bait mend", category: "consumables", notes: "Extends life of plastics, small repairs.", status: "wishlist" },

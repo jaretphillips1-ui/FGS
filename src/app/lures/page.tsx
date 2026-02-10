@@ -6,6 +6,10 @@ const SOURCES = {
   keitech: "https://www.keitechusa.com/",
   zman: "https://zmanfishing.com/",
   missileSpunkShad: "https://www.missilebaits.store/products/spunk-shad-3-0",
+
+  // Added
+  jackall: "https://www.jackall-lures.com/",
+  megabass: "https://megabassusa.com/",
 };
 
 type Status = "owned" | "wishlist";
@@ -76,6 +80,24 @@ const SEED_LURES: LureItem[] = [
     status: "wishlist",
     sourceUrl: SOURCES.spro,
   },
+
+  // Added (from links)
+  {
+    brand: "Jackall",
+    model: "Brand hub seed (hardbaits / finesse later)",
+    category: "hardbait",
+    notes: "Anchor for later: jerkbaits, cranks, topwater, and other Jackall staples.",
+    status: "wishlist",
+    sourceUrl: SOURCES.jackall,
+  },
+  {
+    brand: "Megabass",
+    model: "Brand hub seed (hardbaits / finesse later)",
+    category: "hardbait",
+    notes: "Anchor for later: Vision 110 style jerkbaits, cranks, topwater, etc.",
+    status: "wishlist",
+    sourceUrl: SOURCES.megabass,
+  },
 ];
 
 function StatusPill({ s }: { s: Status }) {
@@ -84,7 +106,13 @@ function StatusPill({ s }: { s: Status }) {
       ? "bg-emerald-100 text-emerald-900 border-emerald-200"
       : "bg-amber-100 text-amber-900 border-amber-200";
   const label = s === "owned" ? "Owned" : "Wishlist";
-  return <span className={`inline-flex items-center px-2 py-0.5 text-xs border rounded ${cls}`}>{label}</span>;
+  return (
+    <span
+      className={`inline-flex items-center px-2 py-0.5 text-xs border rounded ${cls}`}
+    >
+      {label}
+    </span>
+  );
 }
 
 function CatPill({ c }: { c: LureItem["category"] }) {
@@ -104,11 +132,17 @@ export default function Page() {
       <header className="space-y-2">
         <h1 className="text-2xl font-semibold">Lures</h1>
         <p className="text-sm text-gray-600">
-          Seed entries across soft plastics + hard baits so this section has “shape” immediately.
+          Seed entries across soft plastics + hard baits so this section has
+          “shape” immediately.
         </p>
 
         <div className="flex flex-wrap gap-2 text-xs text-gray-700">
-          <a className="underline" href={SOURCES.missileSpunkShad} target="_blank" rel="noreferrer">
+          <a
+            className="underline"
+            href={SOURCES.missileSpunkShad}
+            target="_blank"
+            rel="noreferrer"
+          >
             Missile Baits – Spunk Shad 3.0
           </a>
           <span className="text-gray-400">•</span>
@@ -135,6 +169,14 @@ export default function Page() {
           <a className="underline" href={SOURCES.spro} target="_blank" rel="noreferrer">
             SPRO
           </a>
+          <span className="text-gray-400">•</span>
+          <a className="underline" href={SOURCES.jackall} target="_blank" rel="noreferrer">
+            Jackall
+          </a>
+          <span className="text-gray-400">•</span>
+          <a className="underline" href={SOURCES.megabass} target="_blank" rel="noreferrer">
+            Megabass
+          </a>
         </div>
       </header>
 
@@ -142,7 +184,8 @@ export default function Page() {
         <h2 className="text-lg font-semibold">Owned</h2>
         {owned.length === 0 ? (
           <div className="border rounded p-4 text-sm text-gray-700 bg-white">
-            No owned lures seeded yet — once you tell me your “definitely have” baits, we’ll flip them to Owned.
+            No owned lures seeded yet — once you tell me your “definitely have”
+            baits, we’ll flip them to Owned.
           </div>
         ) : (
           <div className="grid gap-3">
@@ -157,7 +200,9 @@ export default function Page() {
                     <StatusPill s={x.status} />
                   </div>
                 </div>
-                {x.notes ? <div className="text-sm text-gray-700 mt-2">{x.notes}</div> : null}
+                {x.notes ? (
+                  <div className="text-sm text-gray-700 mt-2">{x.notes}</div>
+                ) : null}
                 {x.sourceUrl ? (
                   <div className="text-xs text-gray-600 mt-2">
                     Source:{" "}
@@ -197,7 +242,9 @@ export default function Page() {
                   <StatusPill s={x.status} />
                 </div>
               </div>
-              {x.notes ? <div className="text-sm text-gray-700 mt-2">{x.notes}</div> : null}
+              {x.notes ? (
+                <div className="text-sm text-gray-700 mt-2">{x.notes}</div>
+              ) : null}
               {x.sourceUrl ? (
                 <div className="text-xs text-gray-600 mt-2">
                   Source:{" "}
@@ -212,7 +259,8 @@ export default function Page() {
       </section>
 
       <footer className="text-xs text-gray-500 pt-2">
-        Rule reminder: UX uses only <span className="font-medium">Owned</span> and <span className="font-medium">Wishlist</span>.
+        Rule reminder: UX uses only <span className="font-medium">Owned</span> and{" "}
+        <span className="font-medium">Wishlist</span>.
       </footer>
     </main>
   );
