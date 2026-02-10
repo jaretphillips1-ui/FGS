@@ -16,23 +16,23 @@ const SEED_ELECTRONICS: ElectronicsItem[] = [
   { name: "Fuse block / breaker", category: "power", notes: "Clean power distribution, safety, serviceability.", status: "wishlist" },
   { name: "Through-hull / quick disconnect", category: "wiring", notes: "Keeps wiring tidy + easy to remove electronics.", status: "wishlist" },
 
-  // Added (from links)
+  // Owned (from our chat + your links)
   {
     name: "Humminbird MEGA 360 Imaging",
     category: "transducer",
-    notes: "360 transducer system. Link: https://humminbird.johnsonoutdoors.com/us/learn/imaging/mega-360-imaging",
-    status: "wishlist",
+    notes: "Owned. 360 transducer system. Link: https://humminbird.johnsonoutdoors.com/us/learn/imaging/mega-360-imaging",
+    status: "owned",
   },
   {
     name: "Garmin Force Current (kayak trolling motor)",
     category: "power",
-    notes: "Trolling motor. Link: https://www.garmin.com/en-CA/p/1059129/",
-    status: "wishlist",
+    notes: "Owned. Trolling motor. Link: https://www.garmin.com/en-CA/p/1059129/",
+    status: "owned",
   },
   {
-    name: "Garmin LiveScope bundle (Live sonar)",
+    name: "Garmin LiveScope Plus (bundle)",
     category: "transducer",
-    notes: "LiveScope bundle link (Tackle Depot): https://www.tackledepot.ca/products/garmin-livescope-bundles?variant=41934585659459",
+    notes: "Owned. LiveScope bundle link (Tackle Depot): https://www.tackledepot.ca/products/garmin-livescope-bundles?variant=41934585659459",
     status: "owned",
   },
 ];
