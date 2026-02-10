@@ -25,6 +25,7 @@ const NAV = [
   { href: "/lures", label: "Lures" },
 
   { href: "/shopping", label: "Shopping" },
+  { href: "/inventory", label: "Inventory" },
   { href: "/manufacturers", label: "Manufacturers" },
 
   { href: "/terminal", label: "Terminal" },
