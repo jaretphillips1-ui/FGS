@@ -558,7 +558,9 @@ export default function RodDetailClient({
         }
 
         const res = await withTimeout(
-          supabase.from(TABLE).select("*").eq("id", id).single(),
+          Promise.resolve().then(() =>
+            supabase.from(TABLE).select("*").eq("id", id).single()
+          ),
           8000,
           "gear_items select"
         );
@@ -613,7 +615,9 @@ export default function RodDetailClient({
       }
 
       const res = await withTimeout(
-        supabase.from(TABLE).delete().eq("id", id),
+        Promise.resolve().then(() =>
+          supabase.from(TABLE).delete().eq("id", id)
+        ),
         8000,
         "gear_items delete"
       );
@@ -690,7 +694,9 @@ export default function RodDetailClient({
       }
 
       const res = await withTimeout(
-        supabase.from(TABLE).update(patch).eq("id", id).eq("owner_id", user.id),
+        Promise.resolve().then(() =>
+          supabase.from(TABLE).update(patch).eq("id", id).eq("owner_id", user.id)
+        ),
         8000,
         "gear_items update"
       );

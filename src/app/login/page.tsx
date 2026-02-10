@@ -4,6 +4,23 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
+function errText(err: unknown, fallback: string) {
+  if (err instanceof Error) return err.message || fallback;
+  if (typeof err === "string") return err || fallback;
+
+  // Supabase errors are often plain objects with a "message" field
+  if (err && typeof err === "object" && "message" in err) {
+    const m = (err as { message?: unknown }).message;
+    if (typeof m === "string" && m.trim()) return m.trim();
+  }
+
+  try {
+    return JSON.stringify(err);
+  } catch {
+    return fallback;
+  }
+}
+
 export default function LoginPage() {
   const router = useRouter();
 
@@ -46,7 +63,7 @@ export default function LoginPage() {
         else setMsg("Account created. If email confirmations are ON, confirm your email then sign in.");
       }
     } catch (err: unknown) {
-      setMsg(err?.message ?? "Login failed.");
+      setMsg(errText(err, "Login failed."));
     } finally {
       setLoading(false);
     }
@@ -127,4 +144,3 @@ export default function LoginPage() {
     </main>
   );
 }
-

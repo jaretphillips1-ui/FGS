@@ -23,9 +23,9 @@ type AuthState = "unknown" | "signed_out" | "signed_in";
 type StatusFilter = "all" | "owned" | "wishlist";
 type SortKey = "brand" | "name" | "created_desc" | "status_owned_first";
 
-function hardTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
+function hardTimeout<T>(p: PromiseLike<T>, ms: number, label: string): Promise<T> {
   return Promise.race([
-    p,
+    Promise.resolve(p),
     new Promise<T>((_, rej) =>
       setTimeout(() => rej(new Error(`${label} timed out after ${ms}ms`)), ms)
     ),

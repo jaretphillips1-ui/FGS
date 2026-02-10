@@ -10,6 +10,11 @@ function mustGetEnv(...keys: string[]) {
   throw new Error(`Missing Supabase env var. Tried: ${keys.join(", ")}`);
 }
 
+function asCookieOptions(options: unknown): Record<string, unknown> {
+  if (options && typeof options === "object" && !Array.isArray(options)) return options as Record<string, unknown>;
+  return {};
+}
+
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const code = url.searchParams.get("code");
@@ -17,11 +22,7 @@ export async function GET(request: Request) {
 
   const cookieStore = await cookies();
 
-  const supabaseUrl = mustGetEnv(
-    "NEXT_PUBLIC_SUPABASE_URL",
-    "SUPABASE_URL",
-    "VITE_SUPABASE_URL"
-  );
+  const supabaseUrl = mustGetEnv("NEXT_PUBLIC_SUPABASE_URL", "SUPABASE_URL", "VITE_SUPABASE_URL");
 
   const supabaseAnonKey = mustGetEnv(
     "NEXT_PUBLIC_SUPABASE_ANON_KEY",
@@ -36,10 +37,10 @@ export async function GET(request: Request) {
         return cookieStore.get(name)?.value;
       },
       set(name: string, value: string, options: unknown) {
-        cookieStore.set({ name, value, ...options });
+        cookieStore.set({ name, value, ...asCookieOptions(options) });
       },
       remove(name: string, options: unknown) {
-        cookieStore.set({ name, value: "", ...options, maxAge: 0 });
+        cookieStore.set({ name, value: "", ...asCookieOptions(options), maxAge: 0 });
       },
     },
   });
@@ -50,4 +51,3 @@ export async function GET(request: Request) {
 
   return NextResponse.redirect(`${url.origin}${next}`);
 }
-
