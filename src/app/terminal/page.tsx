@@ -1,170 +1,113 @@
-import { SourceLink } from "@/components/SourceLink";
+import Link from "next/link";
 
-const SOURCES = {
-  bkk: "https://bkkhooks.com/",
-  bkkAmericasCatalog: "https://bkkhooks-americas.com/catalog/",
-  owner: "https://www.ownerhooks.com/",
-  gamakatsu: "https://gamakatsu.com/",
+type Tile = {
+  title: string;
+  href: string;
+  desc: string;
+  badge?: string;
 };
 
-type Status = "owned" | "wishlist";
-
-type TerminalItem = {
-  brand: string;
-  model: string;
-  category: "hooks" | "weights" | "swivels" | "snaps" | "jigheads" | "terminal-tools";
-  notes?: string;
-  status: Status;
-  sourceUrl?: string;
-};
-
-const SEED_TERMINAL: TerminalItem[] = [
-  {
-    brand: "BKK",
-    model: "Octopus / Live Bait hook families (catalog seed)",
-    category: "hooks",
-    notes: "Catalog anchor for later real SKU capture (sizes, packs, etc.).",
-    status: "wishlist",
-    sourceUrl: SOURCES.bkkAmericasCatalog,
-  },
-  {
-    brand: "BKK",
-    model: "Wide Gap (EWG-style) hook families (catalog seed)",
-    category: "hooks",
-    notes: "Good placeholder for worm hooks / flipping soft plastics.",
-    status: "wishlist",
-    sourceUrl: SOURCES.bkkAmericasCatalog,
-  },
-  {
-    brand: "Owner",
-    model: "Hook lineup (brand hub seed)",
-    category: "hooks",
-    notes: "Landing page seed — we’ll pull exact models later (EWG, wacky, dropshot, trebles).",
-    status: "wishlist",
-    sourceUrl: SOURCES.owner,
-  },
-  {
-    brand: "Gamakatsu",
-    model: "Hook lineup (brand hub seed)",
-    category: "hooks",
-    notes: "Landing page seed — common models include EWG, finesse, trebles, circles.",
-    status: "wishlist",
-    sourceUrl: SOURCES.gamakatsu,
-  },
-];
-
-function StatusPill({ s }: { s: Status }) {
-  const cls =
-    s === "owned"
-      ? "bg-emerald-100 text-emerald-900 border-emerald-200"
-      : "bg-amber-100 text-amber-900 border-amber-200";
-  const label = s === "owned" ? "Owned" : "Wishlist";
-  return <span className={`inline-flex items-center px-2 py-0.5 text-xs border rounded ${cls}`}>{label}</span>;
-}
-
-function CatPill({ c }: { c: TerminalItem["category"] }) {
+function TileCard(t: Tile) {
   return (
-    <span className="inline-flex items-center px-2 py-0.5 text-xs border rounded bg-gray-50 text-gray-800 border-gray-200">
-      {c}
-    </span>
+    <Link
+      href={t.href}
+      className="block rounded-lg border bg-white p-4 hover:bg-gray-50 transition"
+    >
+      <div className="flex items-center justify-between gap-3">
+        <div className="font-semibold text-sm">{t.title}</div>
+        {t.badge ? (
+          <span className="text-[11px] px-2 py-0.5 rounded border bg-gray-100 text-gray-700">
+            {t.badge}
+          </span>
+        ) : null}
+      </div>
+      <div className="text-xs text-gray-600 mt-1">{t.desc}</div>
+      <div className="text-xs text-gray-500 mt-2">{t.href}</div>
+    </Link>
   );
 }
 
-export default function Page() {
-  const owned = SEED_TERMINAL.filter((x) => x.status === "owned");
-  const wishlist = SEED_TERMINAL.filter((x) => x.status === "wishlist");
+export default function TerminalHomePage() {
+  const apollo: Tile[] = [
+    {
+      title: "Apollo 3 — Bulk Add Reels",
+      href: "/terminal/apollo3",
+      desc: "Paste list → preview → insert into gear_items (reels).",
+      badge: "Bulk",
+    },
+  ];
+
+  const terminalTools: Tile[] = [
+    { title: "Hooks", href: "/terminal/hooks", desc: "Terminal tool for hooks." },
+    { title: "Jigheads", href: "/terminal/jigheads", desc: "Terminal tool for jigheads." },
+    { title: "Weights", href: "/terminal/weights", desc: "Terminal tool for weights." },
+    { title: "Swivels & Snaps", href: "/terminal/swivels-snaps", desc: "Terminal tool for swivels/snaps." },
+  ];
+
+  const bulkOther: Tile[] = [
+    {
+      title: "Bulk Add Combos",
+      href: "/combos/bulk",
+      desc: "Paste Rod | Reel name pairs → match → insert combos.",
+      badge: "Bulk",
+    },
+  ];
 
   return (
     <main className="max-w-5xl mx-auto p-6 space-y-6">
-      <header className="space-y-2">
-        <h1 className="text-2xl font-semibold">Terminal Tackle</h1>
-        <p className="text-sm text-gray-600">
-          Seeded “real-ish” terminal entries and brand anchors. Next we’ll add actual hook sizes, weights, and packs.
-        </p>
-
-        <div className="flex flex-wrap gap-2 text-xs text-gray-700">
-          <SourceLink href={SOURCES.bkk} label="BKK (global)" />
-          <span className="text-gray-400">•</span>
-          <SourceLink href={SOURCES.bkkAmericasCatalog} label="BKK Americas catalog" />
-          <span className="text-gray-400">•</span>
-          <SourceLink href={SOURCES.owner} label="Owner Hooks" />
-          <span className="text-gray-400">•</span>
-          <SourceLink href={SOURCES.gamakatsu} label="Gamakatsu" />
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <div>
+          <h1 className="text-2xl font-semibold">Terminal</h1>
+          <div className="text-sm text-gray-500 mt-1">
+            Bulk tools and fast utilities (paste-heavy workflows).
+          </div>
         </div>
-      </header>
 
-      <section className="space-y-3">
-        <h2 className="text-lg font-semibold">Owned</h2>
-        {owned.length === 0 ? (
-          <div className="border rounded p-4 text-sm text-gray-700 bg-white">
-            Nothing marked owned yet — we can flip statuses fast once you list what’s in your hook box.
-          </div>
-        ) : (
-          <div className="grid gap-3">
-            {owned.map((x, i) => (
-              <div key={`o-${i}`} className="border rounded p-4 bg-white">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div className="font-medium">
-                    {x.brand} — {x.model}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <CatPill c={x.category} />
-                    <StatusPill s={x.status} />
-                  </div>
-                </div>
-                {x.notes ? <div className="text-sm text-gray-700 mt-2">{x.notes}</div> : null}
-                {x.sourceUrl ? (
-                  <div className="text-xs text-gray-600 mt-2">
-                    Source:{" "}
-                    <SourceLink href={x.sourceUrl} />
-                  </div>
-                ) : null}
-              </div>
-            ))}
-          </div>
-        )}
-      </section>
+        <div className="flex items-center gap-2">
+          <Link className="px-4 py-2 rounded border" href="/rods">Rods</Link>
+          <Link className="px-4 py-2 rounded border" href="/reels">Reels</Link>
+          <Link className="px-4 py-2 rounded border" href="/combos">Combos</Link>
+        </div>
+      </div>
 
       <section className="space-y-3">
         <div className="flex items-center justify-between gap-3">
-          <h2 className="text-lg font-semibold">Wishlist</h2>
-          <button
-            type="button"
-            className="px-4 py-2 rounded bg-black text-white opacity-60 cursor-not-allowed"
-            disabled
-            title="Coming soon"
-          >
-            Add (coming soon)
-          </button>
+          <h2 className="text-sm font-semibold text-gray-700">Apollo</h2>
+          <div className="text-xs text-gray-500">Bulk import tools</div>
         </div>
-
-        <div className="grid gap-3">
-          {wishlist.map((x, i) => (
-            <div key={`w-${i}`} className="border rounded p-4 bg-white">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="font-medium">
-                  {x.brand} — {x.model}
-                </div>
-                <div className="flex items-center gap-2">
-                  <CatPill c={x.category} />
-                  <StatusPill s={x.status} />
-                </div>
-              </div>
-              {x.notes ? <div className="text-sm text-gray-700 mt-2">{x.notes}</div> : null}
-              {x.sourceUrl ? (
-                <div className="text-xs text-gray-600 mt-2">
-                  Source:{" "}
-                  <SourceLink href={x.sourceUrl} />
-                </div>
-              ) : null}
-            </div>
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          {apollo.map((t) => (
+            <TileCard key={t.href} {...t} />
           ))}
         </div>
       </section>
 
-      <footer className="text-xs text-gray-500 pt-2">
-        Rule reminder: UX uses only <span className="font-medium">Owned</span> and <span className="font-medium">Wishlist</span>.
-      </footer>
+      <section className="space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-sm font-semibold text-gray-700">Bulk</h2>
+          <div className="text-xs text-gray-500">High-volume add/edit helpers</div>
+        </div>
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          {bulkOther.map((t) => (
+            <TileCard key={t.href} {...t} />
+          ))}
+        </div>
+      </section>
+
+      <section className="space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-sm font-semibold text-gray-700">Terminal Tools</h2>
+          <div className="text-xs text-gray-500">Quick utilities</div>
+        </div>
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          {terminalTools
+            .slice()
+            .sort((a, b) => a.title.localeCompare(b.title))
+            .map((t) => (
+              <TileCard key={t.href} {...t} />
+            ))}
+        </div>
+      </section>
     </main>
   );
 }
