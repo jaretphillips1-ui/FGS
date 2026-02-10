@@ -34,7 +34,9 @@ const CATEGORIES = [
   "Reel",
   "Electronics",
   "Toolbox",
-].slice().sort((a, b) => a.localeCompare(b));
+]
+  .slice()
+  .sort((a, b) => a.localeCompare(b));
 
 function StatusPill({ s }: { s: IntakeStatus }) {
   const cls =
@@ -42,7 +44,19 @@ function StatusPill({ s }: { s: IntakeStatus }) {
       ? "bg-emerald-100 text-emerald-900 border-emerald-200"
       : "bg-amber-100 text-amber-900 border-amber-200";
   const label = s === "owned" ? "Owned" : "Wishlist";
-  return <span className={`inline-flex items-center px-2 py-0.5 text-xs border rounded ${cls}`}>{label}</span>;
+  return (
+    <span className={`inline-flex items-center px-2 py-0.5 text-xs border rounded ${cls}`}>
+      {label}
+    </span>
+  );
+}
+
+function CategoryPill({ c }: { c: string }) {
+  return (
+    <span className="inline-flex items-center px-2 py-0.5 text-xs border rounded bg-gray-50 text-gray-800 border-gray-200">
+      {c}
+    </span>
+  );
 }
 
 export default function IntakePage() {
@@ -59,6 +73,12 @@ export default function IntakePage() {
   const [notes, setNotes] = useState("");
   const [files, setFiles] = useState<File[]>([]);
   const [saving, setSaving] = useState(false);
+
+  // UI: expand/collapse + signed photo URLs
+  const [openId, setOpenId] = useState<string | null>(null);
+  const [photoUrlsByIntake, setPhotoUrlsByIntake] = useState<Map<string, string[]>>(new Map());
+  const [photoErrByIntake, setPhotoErrByIntake] = useState<Map<string, string>>(new Map());
+  const [loadingPhotosFor, setLoadingPhotosFor] = useState<string | null>(null);
 
   const sortedRows = useMemo(() => {
     return rows.slice().sort((a, b) => (b.updated_at ?? "").localeCompare(a.updated_at ?? ""));
@@ -116,6 +136,77 @@ export default function IntakePage() {
     load();
   }, []);
 
+  async function buildSignedUrlsFor(intakeId: string): Promise<string[]> {
+    const photos = photosByIntake.get(intakeId) ?? [];
+    if (photos.length === 0) return [];
+
+    const urls: string[] = [];
+    const failures: string[] = [];
+
+    // 10 minutes is plenty for previewing
+    const expiresIn = 60 * 10;
+
+    for (const p of photos) {
+      const res = await supabase.storage.from("gear-photos").createSignedUrl(p.storage_path, expiresIn);
+      if (res.error) {
+        failures.push(`${p.storage_path}: ${res.error.message}`);
+        continue;
+      }
+      const u = res.data?.signedUrl;
+      if (!u) {
+        failures.push(`${p.storage_path}: no signedUrl returned`);
+        continue;
+      }
+      urls.push(u);
+    }
+
+    setPhotoErrByIntake((prev) => {
+      const next = new Map(prev);
+      if (failures.length > 0) {
+        next.set(intakeId, failures.slice(0, 3).join(" | "));
+      } else {
+        next.delete(intakeId);
+      }
+      return next;
+    });
+
+    return urls;
+  }
+
+  async function ensurePhotoUrls(intakeId: string) {
+    // Always allow retry if prior attempt failed or yielded nothing
+    setLoadingPhotosFor(intakeId);
+    try {
+      const urls = await buildSignedUrlsFor(intakeId);
+      setPhotoUrlsByIntake((prev) => {
+        const next = new Map(prev);
+        next.set(intakeId, urls);
+        return next;
+      });
+    } catch (e: unknown) {
+      setErr(e instanceof Error ? e.message : "Failed to load photo previews.");
+    } finally {
+      setLoadingPhotosFor(null);
+    }
+  }
+
+  async function openPhoto(storagePath: string) {
+    try {
+      const res = await supabase.storage.from("gear-photos").createSignedUrl(storagePath, 60 * 10);
+      if (res.error) throw res.error;
+      const url = res.data?.signedUrl;
+      if (!url) throw new Error("No signedUrl returned.");
+      window.open(url, "_blank", "noreferrer");
+    } catch (e: unknown) {
+      alert(e instanceof Error ? e.message : "Failed to open photo.");
+    }
+  }
+
+  async function toggleOpen(intakeId: string) {
+    setOpenId((cur) => (cur === intakeId ? null : intakeId));
+    await ensurePhotoUrls(intakeId);
+  }
+
   async function createIntake() {
     setSaving(true);
     setErr(null);
@@ -166,7 +257,13 @@ export default function IntakePage() {
       setNotes("");
       setFiles([]);
 
+      // reset expanded state to avoid confusion after insert
+      setOpenId(intake.id);
+      setPhotoUrlsByIntake(new Map());
+      setPhotoErrByIntake(new Map());
+
       await load();
+      await ensurePhotoUrls(intake.id);
     } catch (e: unknown) {
       setErr(e instanceof Error ? e.message : "Failed to create intake item.");
     } finally {
@@ -180,6 +277,19 @@ export default function IntakePage() {
     try {
       const { error } = await supabase.from("gear_intake_items").delete().eq("id", intakeId);
       if (error) throw error;
+
+      setOpenId((cur) => (cur === intakeId ? null : cur));
+      setPhotoUrlsByIntake((prev) => {
+        const next = new Map(prev);
+        next.delete(intakeId);
+        return next;
+      });
+      setPhotoErrByIntake((prev) => {
+        const next = new Map(prev);
+        next.delete(intakeId);
+        return next;
+      });
+
       await load();
     } catch (e: unknown) {
       alert(e instanceof Error ? e.message : "Delete failed.");
@@ -208,11 +318,7 @@ export default function IntakePage() {
         <div className="grid sm:grid-cols-2 gap-3">
           <label className="text-sm space-y-1">
             <div className="text-gray-700">Category</div>
-            <select
-              className="w-full border rounded px-2 py-1"
-              value={category}
-              onChange={(e) => setCategory(e.target.value)}
-            >
+            <select className="w-full border rounded px-2 py-1" value={category} onChange={(e) => setCategory(e.target.value)}>
               {CATEGORIES.map((c) => (
                 <option key={c} value={c}>
                   {c}
@@ -223,11 +329,7 @@ export default function IntakePage() {
 
           <label className="text-sm space-y-1">
             <div className="text-gray-700">Status</div>
-            <select
-              className="w-full border rounded px-2 py-1"
-              value={status}
-              onChange={(e) => setStatus(e.target.value as IntakeStatus)}
-            >
+            <select className="w-full border rounded px-2 py-1" value={status} onChange={(e) => setStatus(e.target.value as IntakeStatus)}>
               <option value="owned">Owned</option>
               <option value="wishlist">Wishlist</option>
             </select>
@@ -235,50 +337,27 @@ export default function IntakePage() {
 
           <label className="text-sm space-y-1">
             <div className="text-gray-700">Brand</div>
-            <input
-              className="w-full border rounded px-2 py-1"
-              value={brand}
-              onChange={(e) => setBrand(e.target.value)}
-              placeholder="e.g., Rapala"
-            />
+            <input className="w-full border rounded px-2 py-1" value={brand} onChange={(e) => setBrand(e.target.value)} placeholder="e.g., Rapala" />
           </label>
 
           <label className="text-sm space-y-1">
             <div className="text-gray-700">Model</div>
-            <input
-              className="w-full border rounded px-2 py-1"
-              value={model}
-              onChange={(e) => setModel(e.target.value)}
-              placeholder="e.g., Shadow Rap"
-            />
+            <input className="w-full border rounded px-2 py-1" value={model} onChange={(e) => setModel(e.target.value)} placeholder="e.g., Shadow Rap" />
           </label>
         </div>
 
         <label className="text-sm space-y-1 block">
           <div className="text-gray-700">Notes</div>
-          <textarea
-            className="w-full border rounded px-2 py-1 min-h-20"
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-          />
+          <textarea className="w-full border rounded px-2 py-0.5 min-h-20" value={notes} onChange={(e) => setNotes(e.target.value)} />
         </label>
 
         <label className="text-sm space-y-1 block">
           <div className="text-gray-700">Photos (optional)</div>
-          <input
-            type="file"
-            accept="image/*"
-            multiple
-            onChange={(e) => setFiles(Array.from(e.target.files ?? []))}
-          />
+          <input type="file" accept="image/*" multiple onChange={(e) => setFiles(Array.from(e.target.files ?? []))} />
           {files.length > 0 ? <div className="text-xs text-gray-500">{files.length} selected</div> : null}
         </label>
 
-        <button
-          className="px-3 py-2 rounded border text-sm hover:bg-gray-50 disabled:opacity-50"
-          onClick={createIntake}
-          disabled={saving}
-        >
+        <button className="px-3 py-2 rounded border text-sm hover:bg-gray-50 disabled:opacity-50" onClick={createIntake} disabled={saving}>
           {saving ? "Saving…" : "Save Intake Item"}
         </button>
       </section>
@@ -295,33 +374,100 @@ export default function IntakePage() {
           <div className="grid gap-3">
             {sortedRows.map((r) => {
               const photos = photosByIntake.get(r.id) ?? [];
+              const isOpen = openId === r.id;
               const title = [r.brand, r.model].filter(Boolean).join(" — ") || "(No brand/model yet)";
+
+              const photoUrls = photoUrlsByIntake.get(r.id) ?? [];
+              const photoLoading = loadingPhotosFor === r.id;
+              const photoErr = photoErrByIntake.get(r.id) ?? null;
+
               return (
-                <div key={r.id} className="border rounded p-4 bg-white space-y-2">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="font-medium">{title}</div>
-                    <div className="flex items-center gap-2">
-                      <span className="inline-flex items-center px-2 py-0.5 text-xs border rounded bg-gray-50 text-gray-800 border-gray-200">
-                        {r.category}
-                      </span>
-                      <StatusPill s={r.status} />
+                <div key={r.id} className="border rounded bg-white">
+                  <button
+                    type="button"
+                    onClick={() => void toggleOpen(r.id)}
+                    className="w-full text-left p-4 hover:bg-gray-50"
+                    aria-expanded={isOpen}
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="font-medium">{title}</div>
+                      <div className="flex items-center gap-2">
+                        <CategoryPill c={r.category} />
+                        <StatusPill s={r.status} />
+                        <span className="text-xs text-gray-500">{isOpen ? "Hide" : "Details"}</span>
+                      </div>
                     </div>
-                  </div>
 
-                  {r.notes ? <div className="text-sm text-gray-700">{r.notes}</div> : null}
+                    <div className="text-xs text-gray-500 mt-2">
+                      Photos: {photos.length} • Updated: {new Date(r.updated_at).toLocaleString()}
+                    </div>
+                  </button>
 
-                  <div className="text-xs text-gray-500">
-                    Photos: {photos.length} • Updated: {new Date(r.updated_at).toLocaleString()}
-                  </div>
+                  {isOpen ? (
+                    <div className="px-4 pb-4 space-y-3">
+                      {r.notes ? (
+                        <div className="text-sm text-gray-700 whitespace-pre-wrap">{r.notes}</div>
+                      ) : (
+                        <div className="text-sm text-gray-500">No notes.</div>
+                      )}
 
-                  <div className="flex items-center gap-2">
-                    <button
-                      className="px-2 py-1 rounded border text-xs hover:bg-gray-50"
-                      onClick={() => deleteIntake(r.id)}
-                    >
-                      Delete
-                    </button>
-                  </div>
+                      {photos.length > 0 ? (
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="text-sm font-medium">Photos</div>
+                            <button
+                              className="px-2 py-1 rounded border text-xs hover:bg-gray-50"
+                              onClick={() => void ensurePhotoUrls(r.id)}
+                              type="button"
+                            >
+                              Retry
+                            </button>
+                          </div>
+
+                          {photoLoading ? (
+                            <div className="text-sm text-gray-600">Loading photo previews…</div>
+                          ) : photoUrls.length > 0 ? (
+                            <div className="grid sm:grid-cols-2 gap-3">
+                              {photoUrls.map((url, i) => (
+                                <a key={`${r.id}-ph-${i}`} href={url} target="_blank" rel="noreferrer" className="block">
+                                  <img src={url} alt={`Intake photo ${i + 1}`} className="w-full h-56 object-cover rounded border" />
+                                </a>
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="text-sm text-gray-700">
+                              <div className="font-medium">No previews yet.</div>
+                              <div className="text-xs text-gray-500 mt-1">
+                                You can still open photos using the links below. If these links fail, it’s almost always a Storage read-policy issue.
+                              </div>
+                              {photoErr ? <div className="text-xs text-amber-700 mt-2">Note: {photoErr}</div> : null}
+                            </div>
+                          )}
+
+                          <div className="space-y-1">
+                            {(photosByIntake.get(r.id) ?? []).map((p, i) => (
+                              <button
+                                key={p.id}
+                                type="button"
+                                className="text-xs underline text-blue-700 hover:text-blue-900"
+                                onClick={() => void openPhoto(p.storage_path)}
+                              >
+                                Open photo {i + 1}
+                              </button>
+                            ))}
+                          </div>
+
+                          <div className="text-xs text-gray-500">Tip: clicking “Open photo” opens in a new tab.</div>
+                        </div>
+                      ) : null}
+
+                      <div className="flex items-center gap-2">
+                        <button className="px-2 py-1 rounded border text-xs hover:bg-gray-50" onClick={() => void deleteIntake(r.id)}>
+                          Delete
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
               );
             })}
@@ -335,4 +481,3 @@ export default function IntakePage() {
     </main>
   );
 }
-
