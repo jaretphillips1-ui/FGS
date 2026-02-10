@@ -28,15 +28,6 @@ function TileCard(t: Tile) {
 }
 
 export default function TerminalHomePage() {
-  const apollo: Tile[] = [
-    {
-      title: "Apollo 3 — Bulk Add Reels",
-      href: "/terminal/apollo3",
-      desc: "Paste list → preview → insert into gear_items (reels).",
-      badge: "Bulk",
-    },
-  ];
-
   const terminalTools: Tile[] = [
     { title: "Hooks", href: "/terminal/hooks", desc: "Terminal tool for hooks." },
     { title: "Jigheads", href: "/terminal/jigheads", desc: "Terminal tool for jigheads." },
@@ -44,61 +35,33 @@ export default function TerminalHomePage() {
     { title: "Swivels & Snaps", href: "/terminal/swivels-snaps", desc: "Terminal tool for swivels/snaps." },
   ];
 
-  const bulkOther: Tile[] = [
-    {
-      title: "Bulk Add Combos",
-      href: "/combos/bulk",
-      desc: "Paste Rod | Reel name pairs → match → insert combos.",
-      badge: "Bulk",
-    },
-  ];
-
   return (
     <main className="max-w-5xl mx-auto p-6 space-y-6">
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
           <h1 className="text-2xl font-semibold">Terminal</h1>
-          <div className="text-sm text-gray-500 mt-1">
-            Bulk tools and fast utilities (paste-heavy workflows).
-          </div>
+          <div className="text-sm text-gray-500 mt-1">Quick utilities.</div>
         </div>
 
         <div className="flex items-center gap-2">
-          <Link className="px-4 py-2 rounded border" href="/rods">Rods</Link>
-          <Link className="px-4 py-2 rounded border" href="/reels">Reels</Link>
-          <Link className="px-4 py-2 rounded border" href="/combos">Combos</Link>
+          <Link className="px-4 py-2 rounded border" href="/rods">
+            Rods
+          </Link>
+          <Link className="px-4 py-2 rounded border" href="/reels">
+            Reels
+          </Link>
+          <Link className="px-4 py-2 rounded border" href="/combos">
+            Combos
+          </Link>
         </div>
       </div>
-
-      <section className="space-y-3">
-        <div className="flex items-center justify-between gap-3">
-          <h2 className="text-sm font-semibold text-gray-700">Apollo</h2>
-          <div className="text-xs text-gray-500">Bulk import tools</div>
-        </div>
-        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {apollo.map((t) => (
-            <TileCard key={t.href} {...t} />
-          ))}
-        </div>
-      </section>
-
-      <section className="space-y-3">
-        <div className="flex items-center justify-between gap-3">
-          <h2 className="text-sm font-semibold text-gray-700">Bulk</h2>
-          <div className="text-xs text-gray-500">High-volume add/edit helpers</div>
-        </div>
-        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {bulkOther.map((t) => (
-            <TileCard key={t.href} {...t} />
-          ))}
-        </div>
-      </section>
 
       <section className="space-y-3">
         <div className="flex items-center justify-between gap-3">
           <h2 className="text-sm font-semibold text-gray-700">Terminal Tools</h2>
           <div className="text-xs text-gray-500">Quick utilities</div>
         </div>
+
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {terminalTools
             .slice()
