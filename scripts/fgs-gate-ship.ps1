@@ -1,6 +1,6 @@
 param(
-  [Parameter(Mandatory=$true)]
-  [string]$Message,
+  # Commit message is only required when actually shipping.
+  [string]$Message = "",
 
   # Optional: restrict staging to a list of paths.
   # If omitted, stages ALL tracked changes + NEW files.
@@ -10,18 +10,31 @@ param(
   [switch]$IncludeUntracked,
 
   # If set, auto-run the EPERM fix + retry build once (recommended).
-  [switch]$AutoFixNext = $true
+  [switch]$AutoFixNext = $true,
+
+  # If set, only run gates (lint/build) and print a verdict. No staging/commit/push.
+  [switch]$GateOnly,
+
+  # If set, keep output minimal and focus on verdict lines.
+  [switch]$VerdictOnly
 )
 
 function Fail($msg) {
-  Write-Host ""
-  Write-Host "❌ $msg" -ForegroundColor Red
+  if (-not $VerdictOnly) { Write-Host "" }
+  Write-Host "🛑 NOT READY — $msg" -ForegroundColor Red
   exit 1
 }
 
+function Ok($msg) {
+  if (-not $VerdictOnly) { Write-Host "" }
+  Write-Host "✅ READY — $msg" -ForegroundColor Green
+}
+
 function Run($cmd) {
-  Write-Host ""
-  Write-Host ">> $cmd" -ForegroundColor Cyan
+  if (-not $VerdictOnly) {
+    Write-Host ""
+    Write-Host ">> $cmd" -ForegroundColor Cyan
+  }
   iex $cmd
   if ($LASTEXITCODE -ne 0) {
     Fail "Command failed: $cmd"
@@ -31,34 +44,35 @@ function Run($cmd) {
 # --- Preflight ---
 Run "git rev-parse --is-inside-work-tree | Out-Null"
 
-Write-Host ""
-Write-Host "=== FGS GATE + SHIP ===" -ForegroundColor White
-Run "git status"
+if (-not $VerdictOnly) {
+  Write-Host ""
+  Write-Host "=== FGS GATE + SHIP ===" -ForegroundColor White
+}
 
 # If no changes at all, stop.
 $porcelain = git status --porcelain
 if (-not $porcelain) {
-  Fail "No changes to commit."
+  Fail "No changes detected."
 }
 
-# If user supplied Paths, ensure they exist.
-if ($Paths.Count -gt 0) {
-  foreach ($p in $Paths) {
-    if (-not (Test-Path $p)) { Fail "Path not found: $p" }
-  }
+if (-not $VerdictOnly) {
+  Run "git status"
+  Write-Host ""
+  Write-Host "=== Diff summary ===" -ForegroundColor White
+  Run "git diff --stat"
 }
-
-Write-Host ""
-Write-Host "=== Diff summary ===" -ForegroundColor White
-Run "git diff --stat"
 
 # --- Quality gates ---
-Write-Host ""
-Write-Host "=== Lint ===" -ForegroundColor White
+if (-not $VerdictOnly) {
+  Write-Host ""
+  Write-Host "=== Lint ===" -ForegroundColor White
+}
 Run "npm run lint"
 
-Write-Host ""
-Write-Host "=== Build (with optional EPERM auto-fix) ===" -ForegroundColor White
+if (-not $VerdictOnly) {
+  Write-Host ""
+  Write-Host "=== Build (with optional EPERM auto-fix) ===" -ForegroundColor White
+}
 
 $buildOk = $false
 try {
@@ -69,8 +83,10 @@ try {
 }
 
 if (-not $buildOk -and $AutoFixNext) {
-  Write-Host ""
-  Write-Host "⚠️ Build failed. Trying EPERM recovery: kill node + wipe .next + retry build once..." -ForegroundColor Yellow
+  if (-not $VerdictOnly) {
+    Write-Host ""
+    Write-Host "⚠️ Build failed. Trying EPERM recovery: kill node + wipe .next + retry build once..." -ForegroundColor Yellow
+  }
 
   Get-Process node -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
   if (Test-Path ".next") { Remove-Item ".next" -Recurse -Force -ErrorAction SilentlyContinue }
@@ -81,12 +97,32 @@ if (-not $buildOk -and $AutoFixNext) {
 }
 
 if (-not $buildOk) {
-  Fail "Build failed. Fix the build, then rerun this script."
+  Fail "Build failed. Fix the build, then rerun."
+}
+
+# If we're only gating, stop here with an explicit verdict.
+if ($GateOnly) {
+  Ok "Lint + build passed. Safe to commit."
+  exit 0
+}
+
+# --- Shipping requires a commit message ---
+if (-not $Message.Trim()) {
+  Fail "Missing -Message. Example: .\scripts\fgs-gate-ship.ps1 -Message `"Shopping: show Restock from inventory`""
+}
+
+# If user supplied Paths, ensure they exist.
+if ($Paths.Count -gt 0) {
+  foreach ($p in $Paths) {
+    if (-not (Test-Path $p)) { Fail "Path not found: $p" }
+  }
 }
 
 # --- Stage ---
-Write-Host ""
-Write-Host "=== Stage ===" -ForegroundColor White
+if (-not $VerdictOnly) {
+  Write-Host ""
+  Write-Host "=== Stage ===" -ForegroundColor White
+}
 
 if ($Paths.Count -gt 0) {
   $quoted = $Paths | ForEach-Object { '"' + $_ + '"' } | Join-String -Separator " "
@@ -98,10 +134,12 @@ if ($Paths.Count -gt 0) {
   # If untracked exist and not allowed, fail (safety)
   $untracked = git status --porcelain | Where-Object { $_ -match '^\?\?' }
   if ($untracked -and -not $IncludeUntracked) {
-    Write-Host ""
-    Write-Host "Untracked files detected:" -ForegroundColor Yellow
-    $untracked | ForEach-Object { Write-Host $_ }
-    Fail "Untracked files present. Re-run with -IncludeUntracked OR pass -Paths to stage only what you want."
+    if (-not $VerdictOnly) {
+      Write-Host ""
+      Write-Host "Untracked files detected:" -ForegroundColor Yellow
+      $untracked | ForEach-Object { Write-Host $_ }
+    }
+    Fail "Untracked files present. Re-run with -IncludeUntracked OR pass -Paths."
   }
 }
 
@@ -111,18 +149,24 @@ if (-not $staged) {
   Fail "Nothing staged. (Did you mean to pass -Paths or -IncludeUntracked?)"
 }
 
-Write-Host ""
-Write-Host "=== Commit ===" -ForegroundColor White
+if (-not $VerdictOnly) {
+  Write-Host ""
+  Write-Host "=== Commit ===" -ForegroundColor White
+}
 Run "git commit -m `"$Message`""
 
-Write-Host ""
-Write-Host "=== Push ===" -ForegroundColor White
+if (-not $VerdictOnly) {
+  Write-Host ""
+  Write-Host "=== Push ===" -ForegroundColor White
+}
 Run "git push"
 
-Write-Host ""
-Write-Host "=== Final ===" -ForegroundColor White
-Run "git status"
-Run "git log -1 --oneline"
+if (-not $VerdictOnly) {
+  Write-Host ""
+  Write-Host "=== Final ===" -ForegroundColor White
+  Run "git status"
+  Run "git log -1 --oneline"
+}
 
 Write-Host ""
-Write-Host "✅ Shipped." -ForegroundColor Green
+Write-Host "✅ SHIPPED." -ForegroundColor Green
