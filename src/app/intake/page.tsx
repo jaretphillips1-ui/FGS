@@ -1,5 +1,7 @@
 "use client";
 
+/* eslint-disable @next/next/no-img-element */
+
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { SectionHeader } from "@/components/SectionHeader";
@@ -481,3 +483,4 @@ export default function IntakePage() {
     </main>
   );
 }
+

@@ -8,6 +8,16 @@ function getHashParams() {
   return new URLSearchParams(raw);
 }
 
+function getErrorMessage(e: unknown): string {
+  if (e instanceof Error) return e.message;
+  if (typeof e === "string") return e;
+  try {
+    return JSON.stringify(e);
+  } catch {
+    return String(e);
+  }
+}
+
 export default function AuthCallbackPage() {
   const [msg, setMsg] = useState<string>("Finalizing sign-in…");
 
@@ -62,8 +72,8 @@ export default function AuthCallbackPage() {
         }
 
         setMsg("No auth tokens found. Please go back to /login and request a fresh magic link.");
-      } catch (e: any) {
-        const text = e?.message ? String(e.message) : String(e);
+      } catch (e: unknown) {
+        const text = getErrorMessage(e);
         if (!cancelled) setMsg(`Sign-in failed: ${text}`);
       }
     }

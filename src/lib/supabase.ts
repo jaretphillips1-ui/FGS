@@ -11,7 +11,6 @@ if (!supabaseUrl) throw new Error("Missing NEXT_PUBLIC_SUPABASE_URL");
 if (!supabaseAnonKey) throw new Error("Missing NEXT_PUBLIC_SUPABASE_ANON_KEY (or publishable key)");
 
 declare global {
-  // eslint-disable-next-line no-var
   var __fgs_supabase__: SupabaseClient | undefined;
 }
 
