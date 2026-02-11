@@ -14,6 +14,7 @@ const ITEMS: SeedItem[] = [
     notes: "Later: Shad Rap, Husky Jerk, DT Series, and depth-specific sorting.",
     status: "wishlist",
     sourceUrl: SOURCES.rapalaUS,
+    // No subgroupKey on purpose (this is a brand hub anchor)
   },
   {
     brand: "Jackall",
@@ -21,6 +22,7 @@ const ITEMS: SeedItem[] = [
     notes: "Later: jerkbaits, cranks, topwater — SKU-level entries when we lock taxonomy.",
     status: "wishlist",
     sourceUrl: SOURCES.jackall,
+    // No subgroupKey on purpose (this is a brand hub anchor)
   },
   {
     brand: "Megabass",
@@ -28,16 +30,19 @@ const ITEMS: SeedItem[] = [
     notes: "Later: Vision 110 style jerkbaits, cranks, topwater.",
     status: "wishlist",
     sourceUrl: SOURCES.megabass,
+    // No subgroupKey on purpose (this is a brand hub anchor)
   },
   {
     model: "Crankbaits (Mid-Depth)",
     notes: "Later: exact models + running depth (Shallow / Mid / Deep).",
     status: "wishlist",
+    subgroupKey: "crankbaits",
   },
   {
     model: "Jerkbaits (Suspending)",
     notes: "Later: exact models + sizes + hook upgrades.",
     status: "wishlist",
+    subgroupKey: "jerkbaits",
   },
 ];
 

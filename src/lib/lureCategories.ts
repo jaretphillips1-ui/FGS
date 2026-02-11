@@ -1,4 +1,4 @@
-export type LureCategoryKey = "hardbaits" | "jigs" | "soft-plastics" | "topwater";
+import type { LureCategoryKey } from "@/lib/lureTaxonomy";
 
 export type LureCategory = {
   key: LureCategoryKey;

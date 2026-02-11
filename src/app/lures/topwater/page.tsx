@@ -10,9 +10,20 @@ const ITEMS: SeedItem[] = [
     notes: "Later: exact frog models + sizes + hook swaps.",
     status: "wishlist",
     sourceUrl: SOURCES.spro,
+    subgroupKey: "frogs",
   },
-  { model: "Poppers", notes: "Later: exact models + sizes.", status: "wishlist" },
-  { model: "Walking Baits", notes: "Later: exact models + sizes.", status: "wishlist" },
+  {
+    model: "Poppers",
+    notes: "Later: exact models + sizes.",
+    status: "wishlist",
+    subgroupKey: "poppers",
+  },
+  {
+    model: "Walking Baits",
+    notes: "Later: exact models + sizes.",
+    status: "wishlist",
+    subgroupKey: "walking",
+  },
 ];
 
 export default function Page() {

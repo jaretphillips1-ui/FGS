@@ -2,9 +2,24 @@ import { LuresCategoryPage, type SeedItem } from "../_components/LuresCategoryPa
 import { LURE_TAXONOMY } from "@/lib/lureTaxonomy";
 
 const ITEMS: SeedItem[] = [
-  { model: "Casting Jigs", notes: "Later: weights + trailers + skirt colors.", status: "wishlist" },
-  { model: "Swim Jigs", notes: "Later: head style + skirt colors + trailer pairing.", status: "wishlist" },
-  { model: "Finesse Jigs", notes: "Later: small profile options.", status: "wishlist" },
+  {
+    model: "Casting Jigs",
+    notes: "Later: weights + trailers + skirt colors.",
+    status: "wishlist",
+    subgroupKey: "casting",
+  },
+  {
+    model: "Swim Jigs",
+    notes: "Later: head style + skirt colors + trailer pairing.",
+    status: "wishlist",
+    subgroupKey: "swim",
+  },
+  {
+    model: "Finesse Jigs",
+    notes: "Later: small profile options.",
+    status: "wishlist",
+    subgroupKey: "finesse",
+  },
 ];
 
 export default function Page() {

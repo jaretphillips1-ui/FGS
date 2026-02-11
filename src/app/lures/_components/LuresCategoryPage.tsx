@@ -8,6 +8,9 @@ export type SeedItem = {
   notes?: string;
   status: "owned" | "wishlist";
   sourceUrl?: string;
+
+  // Optional: tie this seed item to a taxonomy subgroup (worms, crankbaits, etc.)
+  subgroupKey?: string;
 };
 
 function StatusPill({ s }: { s: "owned" | "wishlist" }) {
@@ -60,6 +63,14 @@ function SubgroupCard({ g }: { g: LureSubgroup }) {
   );
 }
 
+function titleCase(s: string) {
+  return s
+    .split(/[\s\-_]+/g)
+    .filter(Boolean)
+    .map((w) => w.slice(0, 1).toUpperCase() + w.slice(1))
+    .join(" ");
+}
+
 export function LuresCategoryPage({
   title,
   subtitle,
@@ -80,6 +91,43 @@ export function LuresCategoryPage({
 
   const sortedSubgroups = (subgroups ?? []).slice().sort((a, b) => a.title.localeCompare(b.title));
 
+  const subgroupTitleByKey = new Map(sortedSubgroups.map((g) => [g.key, g.title] as const));
+  const knownSubgroupKeys = new Set(sortedSubgroups.map((g) => g.key));
+
+  function groupBySubgroup(list: SeedItem[]) {
+    const groups = new Map<string, SeedItem[]>();
+
+    for (const it of list) {
+      const k = it.subgroupKey && knownSubgroupKeys.has(it.subgroupKey) ? it.subgroupKey : "other";
+      const arr = groups.get(k) ?? [];
+      arr.push(it);
+      groups.set(k, arr);
+    }
+
+    const orderedKeys = Array.from(groups.keys()).sort((a, b) => {
+      if (a === "other") return 1;
+      if (b === "other") return -1;
+      const ta = subgroupTitleByKey.get(a) ?? titleCase(a);
+      const tb = subgroupTitleByKey.get(b) ?? titleCase(b);
+      return ta.localeCompare(tb);
+    });
+
+    const ordered = orderedKeys.map((k) => {
+      const label = k === "other" ? "Other" : subgroupTitleByKey.get(k) ?? titleCase(k);
+      const arr = (groups.get(k) ?? []).slice().sort((a, b) => {
+        const ta = (a.brand ? `${a.brand} — ${a.model}` : a.model).toLowerCase();
+        const tb = (b.brand ? `${b.brand} — ${b.model}` : b.model).toLowerCase();
+        return ta.localeCompare(tb);
+      });
+      return { key: k, label, items: arr };
+    });
+
+    return ordered;
+  }
+
+  const ownedGroups = groupBySubgroup(owned);
+  const wishlistGroups = groupBySubgroup(wishlist);
+
   return (
     <main className="max-w-5xl mx-auto p-6 space-y-6">
       <SectionHeader
@@ -99,7 +147,7 @@ export function LuresCategoryPage({
       {sortedSubgroups.length > 0 ? (
         <section className="space-y-3">
           <div className="flex items-baseline justify-between">
-            <h2 className="text-lg font-semibold">Sub-groups</h2>
+            <h2 className="text-lg font-semibold">Sub-Groups</h2>
             <div className="text-xs text-gray-500">{sortedSubgroups.length}</div>
           </div>
           <div className="grid sm:grid-cols-2 gap-3">
@@ -124,7 +172,7 @@ export function LuresCategoryPage({
       <div className="border rounded p-4 bg-white space-y-2">
         <div className="text-sm font-medium">Coming Next</div>
         <div className="text-sm text-gray-600">
-          We’ll keep this <span className="font-medium">type-first</span>, then add filters:
+          We’ll keep this <span className="font-medium">type-first</span>, then add:
         </div>
         <ul className="text-sm text-gray-700 list-disc pl-5">
           <li>
@@ -136,21 +184,50 @@ export function LuresCategoryPage({
           <li>
             <span className="font-medium">Brand</span> (dropdown once the category taxonomy is locked)
           </li>
+          <li>
+            <span className="font-medium">Inventory</span> (variants + auto shopping list status)
+          </li>
         </ul>
       </div>
 
       <section className="space-y-3">
-        <h2 className="text-lg font-semibold">Owned</h2>
+        <div className="flex items-baseline justify-between">
+          <h2 className="text-lg font-semibold">Owned</h2>
+          <div className="text-xs text-gray-500">{owned.length}</div>
+        </div>
+
         {owned.length === 0 ? (
           <div className="border rounded p-4 text-sm text-gray-700 bg-white">None marked owned yet.</div>
         ) : (
-          <div className="grid gap-3">{owned.map((x, i) => <Card key={`o-${i}`} item={x} typeLabel={typeLabel} />)}</div>
+          <div className="space-y-4">
+            {ownedGroups.map((g) => (
+              <div key={`owned-${g.key}`} className="space-y-2">
+                <div className="text-sm font-semibold">{g.label}</div>
+                <div className="grid gap-3">{g.items.map((x, i) => <Card key={`o-${g.key}-${i}`} item={x} typeLabel={typeLabel} />)}</div>
+              </div>
+            ))}
+          </div>
         )}
       </section>
 
       <section className="space-y-3">
-        <h2 className="text-lg font-semibold">Wishlist</h2>
-        <div className="grid gap-3">{wishlist.map((x, i) => <Card key={`w-${i}`} item={x} typeLabel={typeLabel} />)}</div>
+        <div className="flex items-baseline justify-between">
+          <h2 className="text-lg font-semibold">Wishlist</h2>
+          <div className="text-xs text-gray-500">{wishlist.length}</div>
+        </div>
+
+        {wishlist.length === 0 ? (
+          <div className="border rounded p-4 text-sm text-gray-700 bg-white">Nothing on wishlist yet.</div>
+        ) : (
+          <div className="space-y-4">
+            {wishlistGroups.map((g) => (
+              <div key={`wish-${g.key}`} className="space-y-2">
+                <div className="text-sm font-semibold">{g.label}</div>
+                <div className="grid gap-3">{g.items.map((x, i) => <Card key={`w-${g.key}-${i}`} item={x} typeLabel={typeLabel} />)}</div>
+              </div>
+            ))}
+          </div>
+        )}
       </section>
 
       <footer className="text-xs text-gray-500 pt-1">

@@ -16,6 +16,7 @@ const ITEMS: SeedItem[] = [
     notes: "Seed from a real product page (good template for later exact sizes/colors).",
     status: "wishlist",
     sourceUrl: SOURCES.missileSpunkShad,
+    subgroupKey: "soft-swimbaits",
   },
   {
     brand: "Zoom",
@@ -23,6 +24,7 @@ const ITEMS: SeedItem[] = [
     notes: "Pick exact baits/colors later. Type-first stays the priority.",
     status: "wishlist",
     sourceUrl: SOURCES.zoom,
+    subgroupKey: "flukes",
   },
   {
     brand: "Keitech",
@@ -30,6 +32,7 @@ const ITEMS: SeedItem[] = [
     notes: "Swimbait/finesse staples.",
     status: "wishlist",
     sourceUrl: SOURCES.keitech,
+    subgroupKey: "soft-swimbaits",
   },
   {
     brand: "Z-Man",
@@ -37,6 +40,7 @@ const ITEMS: SeedItem[] = [
     notes: "Durable plastics (TRD etc.).",
     status: "wishlist",
     sourceUrl: SOURCES.zman,
+    subgroupKey: "worms",
   },
   {
     brand: "Reaction Innovations",
@@ -44,6 +48,7 @@ const ITEMS: SeedItem[] = [
     notes: "Flipping/creature base.",
     status: "wishlist",
     sourceUrl: SOURCES.reaction,
+    subgroupKey: "creatures",
   },
 ];
 
