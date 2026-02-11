@@ -97,10 +97,35 @@ If Git refuses to stage due to line endings (example: `fatal: CRLF would be repl
 - If node processes exist, inspect command lines before killing:
   - `Get-CimInstance Win32_Process -Filter "Name='node.exe'" | Select-Object ProcessId,CommandLine`
 
-## 12) Reuse shared UI primitives for consistency
+## 12) Relative paths / PWD drift: the failure that *will* repeat unless we encode it
+We hit a classic PowerShell failure:
+- Running `.\scripts\fgs-save-shutdown.ps1` (or `scripts\...`) from `C:\Users\lsphi>` fails because the repo is not the current working directory.
+
+**Guardrail (non-negotiable):**
+- Never run relative repo scripts unless your PWD is the repo root:
+  - `C:\Users\lsphi\OneDrive\AI_Workspace\FGS\fgs-app`
+- Preferred entrypoint is the shortcut/runner (works from anywhere):
+  - `& "C:\Users\lsphi\OneDrive\AI_Workspace\FGS\_RUNNERS\FGS_SAVE_SHUTDOWN.ps1"`
+- Allowed entrypoint is absolute path to the repo script:
+  - `& "C:\Users\lsphi\OneDrive\AI_Workspace\FGS\fgs-app\scripts\fgs-save-shutdown.ps1"`
+- If using a relative path, enforce a cd first:
+  - `Set-Location "C:\Users\lsphi\OneDrive\AI_Workspace\FGS\fgs-app"`
+
+## 13) “Always re-read the rules” trigger (new chat / resume / save)
+At the start of:
+- new chat / resume / before save / after derailment
+
+We must do a fast context refresh:
+- SOP section “Non-negotiable working-directory rule”
+- this Lessons section “Relative paths / PWD drift”
+Then proceed.
+
+(We will automate this with a small script hook in `fgs-resume.ps1` and `fgs-save-shutdown.ps1`.)
+
+## 14) Reuse shared UI primitives for consistency
 When multiple pages need the same UX behavior, extract a shared component (example: `SourceLink` for short external URLs).
 
 **Guardrail:** Prefer one shared component over copy/paste logic across pages.
 
 ---
-Last updated: 2026-02-09
+Last updated: 2026-02-11

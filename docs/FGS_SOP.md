@@ -1,5 +1,9 @@
 # FGS SOP (Source of Truth)
 
+## Why this exists (bulletproof rule)
+This SOP is the safety system. If a step isn’t written here, it isn’t real.
+We use this so we **don’t rely on memory**, and so a broken session can be recovered fast.
+
 ## Golden Rules (No Guessing)
 - **No guessing, ever.**
 - If the exact current file contents are **not already visible in the chat**, the next step is:
@@ -50,8 +54,30 @@
 - Any phrasing like “save FGS” means:
   - Run the canonical **FGS: ONE TRUE SAVE + VERIFY + SHUTDOWN** procedure.
 
-## FGS: ONE TRUE SAVE + VERIFY + SHUTDOWN (Canonical)
-### Canonical locations (do not improvise)
+## Non-negotiable working-directory rule (the thing that broke today)
+**Never run** `.\scripts\...` or `scripts\...` unless your current directory is the repo root:
+- `C:\Users\lsphi\OneDrive\AI_Workspace\FGS\fgs-app`
+
+If you are at `C:\Users\lsphi>` (or anywhere else), relative script paths will fail.
+
+**Guardrail:** Use one of the “safe entrypoints” below every time.
+
+## “Always re-read the rules” trigger (new chat / resume / save)
+At the start of any of these moments:
+- new chat / resume FGS / before save FGS / after any derailment
+
+We must do a fast “context refresh”:
+- open/read this SOP section (“Non-negotiable working-directory rule” + “Safe entrypoints”)
+- open/read Lessons Learned section “Relative paths / PWD drift”
+- then proceed
+
+(We will automate this via a small script hook in `fgs-resume.ps1` and `fgs-save-shutdown.ps1`.)
+
+---
+
+# FGS: ONE TRUE SAVE + VERIFY + SHUTDOWN (Canonical)
+
+## Canonical locations (do not improvise)
 - Canonical save root:
   - `C:\Users\lsphi\OneDrive\AI_Workspace\_SAVES\FGS\LATEST`
 - Desktop mirror (OneDrive Desktop folder-only):
@@ -61,28 +87,51 @@
 - **Hard rule:** no local Desktop mirror folder:
   - `C:\Users\lsphi\Desktop\FGS` must not exist
 
-### The procedure (preferred single command)
-- Run:
-  - `& "scripts\fgs-save-shutdown.ps1"`
-- This must:
-  - preflight `git status` clean
-  - run backup (`scripts\fgs-backup.ps1`)
-  - mirror canonical zip + checkpoint note into `OneDrive\Desktop\FGS`
-  - verify hashes (canonical == mirror)
-  - run `scripts\fgs-verify.ps1`
-  - run `scripts\fgs-verify-mirror.ps1`
-  - stop node/dev server if running
-  - clear `.next\dev\lock` if present
-  - end with PASS
+## Safe entrypoints (use these, not memory)
 
-### Verification scripts (expected tools)
+### Preferred: use the shortcut / runner (works from any folder)
+- Use the desktop shortcut:
+  - **FGS - SAVE + SHUTDOWN.lnk**
+- Or run the runner script directly:
+  - `& "C:\Users\lsphi\OneDrive\AI_Workspace\FGS\_RUNNERS\FGS_SAVE_SHUTDOWN.ps1"`
+
+These do not depend on your current directory.
+
+### Allowed: absolute-path to repo script (works from any folder)
+- `& "C:\Users\lsphi\OneDrive\AI_Workspace\FGS\fgs-app\scripts\fgs-save-shutdown.ps1"`
+
+### Allowed: cd to repo first, then run repo script (only if you are in repo root)
+- `Set-Location "C:\Users\lsphi\OneDrive\AI_Workspace\FGS\fgs-app"`
+- `& "scripts\fgs-save-shutdown.ps1"`
+
+### Forbidden pattern (this is what caused the “not recognized” failure)
+- Running:
+  - `.\scripts\fgs-save-shutdown.ps1`
+  - or `& "scripts\fgs-save-shutdown.ps1"`
+- while NOT in the repo root.
+
+If you are not already at repo root, use the runner/shortcut or absolute path.
+
+## The procedure (what the save script must do)
+The save/shutdown flow must:
+- preflight `git status` clean
+- run backup (`scripts\fgs-backup.ps1`)
+- mirror canonical zip + checkpoint note into `OneDrive\Desktop\FGS`
+- verify hashes (canonical == mirror)
+- run `scripts\fgs-verify.ps1`
+- run `scripts\fgs-verify-mirror.ps1`
+- stop node/dev server if running
+- clear `.next\dev\lock` if present
+- end with PASS
+
+## Verification scripts (expected tools)
 - `scripts\fgs-verify.ps1` (repo + shortcuts + dev-lock + node check + zip status)
 - `scripts\fgs-verify-mirror.ps1` (desktop mirror checks + hash compare)
 - Scheduler scripts exist but are not part of the manual save flow:
   - `scripts\fgs-scheduled-verify-install.ps1`
   - `scripts\fgs-scheduled-verify-uninstall.ps1`
 
-### Dev server/process hygiene
+## Dev server/process hygiene
 - If `fgs-verify.ps1` reports node processes running, confirm command lines before killing:
   - `Get-CimInstance Win32_Process -Filter "Name='node.exe'" | Select-Object ProcessId,CommandLine`
 - Prefer graceful stop (Ctrl+C in the dev-server window). Forced kill is last resort.

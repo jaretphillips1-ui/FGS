@@ -52,6 +52,46 @@ function Invoke-Step {
   Write-Ok ("{0}: OK" -f $Name)
 }
 
+function Write-ContextRefresh {
+  param(
+    [Parameter(Mandatory)][string]$Repo
+  )
+
+  $sop     = Join-Path $Repo "docs\FGS_SOP.md"
+  $lessons = Join-Path $Repo "docs\LESSONS_LEARNED.md"
+
+  Write-Banner "FGS CONTEXT REFRESH (auto)"
+  Write-Host ("Time : {0}" -f (Get-Date -Format "yyyy-MM-dd HH:mm:ss"))
+  Write-Host ("PWD  : {0}" -f (Get-Location).Path)
+  Write-Host ("Repo : {0}" -f $Repo)
+  ""
+  Write-Host "Non-negotiable rule: Relative repo scripts only work from repo root."
+  Write-Host "Safe entrypoints (work from anywhere):"
+  Write-Host ('  - & "{0}"' -f (Join-Path $Repo "scripts\fgs-save-shutdown.ps1"))
+  Write-Host '  - Use the shortcut: FGS - SAVE + SHUTDOWN.lnk (runner)'
+  ""
+  Write-Host "If you see '.\scripts\...' fail from C:\Users\lsphi>, that is PWD drift."
+  ""
+
+  if (Test-Path -LiteralPath $sop) {
+    Write-Host ("SOP:     {0}" -f $sop)
+    Select-String -Path $sop -Pattern "Non-negotiable working-directory rule" -SimpleMatch -Context 0,10 -ErrorAction SilentlyContinue |
+      ForEach-Object { $_.Line; $_.Context.PostContext } | Out-Host
+  } else {
+    Write-Host ("SOP missing: {0}" -f $sop)
+  }
+
+  ""
+
+  if (Test-Path -LiteralPath $lessons) {
+    Write-Host ("Lessons: {0}" -f $lessons)
+    Select-String -Path $lessons -Pattern "Relative paths / PWD drift" -SimpleMatch -Context 0,12 -ErrorAction SilentlyContinue |
+      ForEach-Object { $_.Line; $_.Context.PostContext } | Out-Host
+  } else {
+    Write-Host ("Lessons missing: {0}" -f $lessons)
+  }
+}
+
 function Write-StatusFiles {
   param(
     [Parameter(Mandatory)][string]$StatusDir,
@@ -63,8 +103,6 @@ function Write-StatusFiles {
   )
 
   Ensure-Dir $StatusDir
-
-  # Never allow breadcrumb writing to fail because HEAD is blank
   if ([string]::IsNullOrWhiteSpace($Head)) { $Head = "(unknown)" }
 
   $ts = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
@@ -100,7 +138,6 @@ function Notify-User {
     [ValidateSet("INFO","WARN","ERROR")][string]$Level = "INFO"
   )
 
-  # Preferred: BurntToast (toast notification)
   try {
     if (Get-Module -ListAvailable -Name BurntToast) {
       Import-Module BurntToast -ErrorAction Stop | Out-Null
@@ -109,14 +146,12 @@ function Notify-User {
     }
   } catch {}
 
-  # Fallback: MessageBox (always visible)
   try {
     Add-Type -AssemblyName PresentationFramework -ErrorAction Stop
     [System.Windows.MessageBox]::Show($Text, $Title) | Out-Null
     return
   } catch {}
 
-  # Last resort: console only
   if ($Level -eq "ERROR") { Write-Bad $Text }
   elseif ($Level -eq "WARN") { Write-Warn $Text }
   else { Write-Ok $Text }
@@ -124,6 +159,8 @@ function Notify-User {
 
 $repo = Get-FgsRepoRoot
 Set-Location $repo
+
+Write-ContextRefresh -Repo $repo
 
 # Log file (single artifact you can paste back)
 $logsDir = Join-Path $repo "scripts\logs"
@@ -321,7 +358,6 @@ try {
     & (Join-Path $repo "scripts\fgs-hard-truth.ps1") | Out-Host
   }
 
-  # PASS breadcrumb + popup (fallback head if somehow empty)
   $headFinal = $script:headLine
   if ([string]::IsNullOrWhiteSpace($headFinal)) { $headFinal = (git log -1 --oneline) }
 
