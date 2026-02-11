@@ -10,6 +10,34 @@ We use this so we **don’t rely on memory**, and so a broken session can be rec
   - `Get-Content -Raw <path>` and paste the full file into chat.
 - Only after we have the full current file do we rewrite/patch.
 
+## Command Gate System (Green / Red pacing)
+This is the required pacing system for all commands.
+
+### Gate definitions
+- **🟩 GREEN (OK to continue):** command succeeded and matches Expected Output.
+- **🟥 RED (STOP + paste):** command errors OR output does not match Expected Output OR you feel unsure.
+
+### How we run commands
+For every “action command” (anything that changes state), we must:
+1) State the command
+2) State **Expected Output**
+3) Run it
+4) If Expected Output matches → 🟩 continue
+5) If not → 🟥 stop and paste output
+
+### Mandatory stop conditions
+- Any error (non-zero exit, exception, red text)
+- Any unexpected file path / missing file / “script not found”
+- Any sign of drift (git dirty when expected clean, desktop offenders, missing markers)
+
+### 3-fail rule (hard stop)
+If we attempt 3 patches/fixes and it keeps mutating:
+- STOP editing
+- Run a single “read-pack” (dump relevant files/sections)
+- Only then proceed with the next plan
+
+(We will keep this rule consistent across chats.)
+
 ## File Edit Workflow (Default)
 ### Read
 - You paste full file contents via PowerShell:
@@ -54,7 +82,20 @@ We use this so we **don’t rely on memory**, and so a broken session can be rec
 - Any phrasing like “save FGS” means:
   - Run the canonical **FGS: ONE TRUE SAVE + VERIFY + SHUTDOWN** procedure.
 
+## “Switch chat” Trigger (hard save rule)
+Before switching to a new chat (or when chat feels laggy / unreliable):
+- Run **FGS: ONE TRUE SAVE + VERIFY + SHUTDOWN**
+- AND create/refresh a **RECOVERY pack** (zip + checkpoint + repo bundle + manifest hashes)
+- Only then switch chats
+
 ## Non-negotiable working-directory rule (the thing that broke today)
+
+### The "default page" trap (new windows)
+A new PowerShell window typically starts at `PS C:\Users\lsphi>`.
+Treat that as **🟥 RED** for repo work until you re-enter via:
+- `Set-Location "C:\Users\lsphi\OneDrive\AI_Workspace\FGS\fgs-app"` (or run `fgs`)
+- or a runner/absolute-path entrypoint.
+
 **Never run** `.\scripts\...` or `scripts\...` unless your current directory is the repo root:
 - `C:\Users\lsphi\OneDrive\AI_Workspace\FGS\fgs-app`
 
@@ -67,8 +108,8 @@ At the start of any of these moments:
 - new chat / resume FGS / before save FGS / after any derailment
 
 We must do a fast “context refresh”:
-- open/read this SOP section (“Non-negotiable working-directory rule” + “Safe entrypoints”)
-- open/read Lessons Learned section “Relative paths / PWD drift”
+- open/read this SOP section (“Command Gate System”, “Non-negotiable working-directory rule”)
+- open/read Lessons Learned section “Relative paths / PWD drift” + “Command Gate”
 - then proceed
 
 (We will automate this via a small script hook in `fgs-resume.ps1` and `fgs-save-shutdown.ps1`.)
@@ -124,12 +165,15 @@ The save/shutdown flow must:
 - clear `.next\dev\lock` if present
 - end with PASS
 
-## Verification scripts (expected tools)
-- `scripts\fgs-verify.ps1` (repo + shortcuts + dev-lock + node check + zip status)
-- `scripts\fgs-verify-mirror.ps1` (desktop mirror checks + hash compare)
-- Scheduler scripts exist but are not part of the manual save flow:
-  - `scripts\fgs-scheduled-verify-install.ps1`
-  - `scripts\fgs-scheduled-verify-uninstall.ps1`
+## Verification scripts (manual expected commands)
+- Repo verify:
+  - `& "C:\Users\lsphi\OneDrive\AI_Workspace\FGS\fgs-app\scripts\fgs-verify.ps1"`
+- Mirror verify:
+  - `& "C:\Users\lsphi\OneDrive\AI_Workspace\FGS\fgs-app\scripts\fgs-verify-mirror.ps1"`
+
+Scheduler scripts exist but are not part of the manual save flow:
+- `scripts\fgs-scheduled-verify-install.ps1`
+- `scripts\fgs-scheduled-verify-uninstall.ps1`
 
 ## Dev server/process hygiene
 - If `fgs-verify.ps1` reports node processes running, confirm command lines before killing:
@@ -144,3 +188,5 @@ The save/shutdown flow must:
   - canonical zip and OneDrive Desktop mirror zip must hash-match
   - no node processes running
   - no `.next\dev\lock`
+
+
