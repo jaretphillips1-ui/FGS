@@ -8,8 +8,19 @@ $ErrorActionPreference = "Stop"
 # Config
 $repo      = "C:\Users\lsphi\OneDrive\AI_Workspace\FGS\fgs-app"
 $savesRoot = "C:\Users\lsphi\OneDrive\AI_Workspace\_SAVES\FGS\LATEST"
-$desktop   = Join-Path $env:USERPROFILE "Desktop"
-$deskFGS   = Join-Path $desktop "FGS"
+
+# Desktop roots
+$desktopLocalRoot = Join-Path $env:USERPROFILE "Desktop"
+
+$oneDriveRoot = $env:OneDrive
+if ([string]::IsNullOrWhiteSpace($oneDriveRoot)) {
+  $oneDriveRoot = Join-Path $env:USERPROFILE "OneDrive"
+}
+
+$desktopOneDriveRoot = Join-Path $oneDriveRoot "Desktop"
+$deskFGS_OD          = Join-Path $desktopOneDriveRoot "FGS"     # ✅ ONLY mirror location (policy)
+$deskFGS_Local       = Join-Path $desktopLocalRoot "FGS"        # 🚫 should not exist
+
 $backupPS1 = Join-Path $repo "scripts\fgs-backup.ps1"
 
 function Get-FgsFooterText {
@@ -24,22 +35,37 @@ function Get-FgsFooterText {
   }
 
   $now = Get-Date
-  if ($CacheSeconds -gt 0 -and ($now - $global:FGS_TruthCache.LastRun).TotalSeconds -lt $CacheSeconds -and $global:FGS_TruthCache.Text) {
+  if (
+    $CacheSeconds -gt 0 -and
+    ($now - $global:FGS_TruthCache.LastRun).TotalSeconds -lt $CacheSeconds -and
+    $global:FGS_TruthCache.Text
+  ) {
     return $global:FGS_TruthCache.Text
   }
 
-  # Desktop root offenders (should be 0)
+  # Desktop root offenders (should be 0) — ONLY root-level zips/notes are offenders
   $off = @(
-    @(Get-ChildItem $desktop -File -Filter "FGS_LATEST*.zip" -ErrorAction SilentlyContinue),
-    @(Get-ChildItem $desktop -File -Filter "FGS_LATEST*CHECKPOINT*.txt" -ErrorAction SilentlyContinue)
+    @(Get-ChildItem $desktopLocalRoot   -File -Filter "FGS_LATEST*.zip" -ErrorAction SilentlyContinue),
+    @(Get-ChildItem $desktopLocalRoot   -File -Filter "FGS_LATEST*CHECKPOINT*.txt" -ErrorAction SilentlyContinue),
+    @(Get-ChildItem $desktopOneDriveRoot -File -Filter "FGS_LATEST*.zip" -ErrorAction SilentlyContinue),
+    @(Get-ChildItem $desktopOneDriveRoot -File -Filter "FGS_LATEST*CHECKPOINT*.txt" -ErrorAction SilentlyContinue)
   ) | Where-Object { $_ } | Sort-Object FullName -Unique
   $off = @($off)
 
-  # Desktop\FGS mirror files (target 2)
-  $mirrorCount = 0
-  if (Test-Path $deskFGS) {
-    $mirrorCount = @(Get-ChildItem $deskFGS -File -ErrorAction SilentlyContinue).Count
+  # OneDrive Desktop\FGS required files (target 2: zip + checkpoint)
+  $mirrorReq = 0
+  if (Test-Path $deskFGS_OD) {
+    if (Test-Path (Join-Path $deskFGS_OD "FGS_LATEST.zip"))            { $mirrorReq++ }
+    if (Test-Path (Join-Path $deskFGS_OD "FGS_LATEST_CHECKPOINT.txt")) { $mirrorReq++ }
   }
+
+  # Local Desktop\FGS should not exist; flag if it does
+  $localFGSExists = Test-Path $deskFGS_Local
+  $localFGSCount  = 0
+  if ($localFGSExists) {
+    $localFGSCount = @(Get-ChildItem $deskFGS_Local -File -ErrorAction SilentlyContinue).Count
+  }
+  $localFGSNote = if ($localFGSExists) { "YES($localFGSCount)" } else { "NO" }
 
   # Backup markers in scripts\fgs-backup.ps1 (target 1/1)
   $hdr = 0
@@ -49,13 +75,14 @@ function Get-FgsFooterText {
     $mir = @(Select-String -Path $backupPS1 -Pattern '^\s*#@FGS_DESKTOP_MIRROR\s*$').Count
   }
 
-  # Mirror ZIP drift check
+  # Mirror ZIP quick-check (size + time) — canonical vs OneDrive\Desktop\FGS
   $canonZip  = Join-Path $savesRoot "FGS_LATEST.zip"
-  $deskZip   = Join-Path $deskFGS  "FGS_LATEST.zip"
+  $odZip     = Join-Path $deskFGS_OD "FGS_LATEST.zip"
+
   $zipStatus = "N/A"
-  if ((Test-Path $canonZip) -and (Test-Path $deskZip)) {
+  if ((Test-Path $canonZip) -and (Test-Path $odZip)) {
     $c = Get-Item $canonZip
-    $d = Get-Item $deskZip
+    $d = Get-Item $odZip
     $zipStatus = if (($c.Length -eq $d.Length) -and ($c.LastWriteTime -eq $d.LastWriteTime)) { "OK" } else { "DRIFT?" }
   }
 
@@ -73,9 +100,10 @@ function Get-FgsFooterText {
     "  Git:  " + $gitState,
     "  Dirty: " + $dirtyList,
     "  Desktop root offenders: " + $off.Count + "  (should be 0)",
-    "  Desktop\FGS mirror files: " + $mirrorCount + " (should be 2)",
+    "  OneDrive Desktop\FGS mirror required files: " + $mirrorReq + " (should be 2)",
+    "  Local Desktop\FGS exists: " + $localFGSNote + " (should be NO)",
     "  Backup markers: header=" + $hdr + " mirror=" + $mir + " (should be 1/1)",
-    "  Mirror ZIP quick-check: " + $zipStatus + " (size+time)"
+    "  Mirror ZIP quick-check (OD folder): " + $zipStatus + " (size+time)"
   )
 
   $text = ($lines -join "`r`n")
