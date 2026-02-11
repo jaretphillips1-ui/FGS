@@ -3,6 +3,9 @@ import Link from "next/link";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
+import { UiModeProvider } from "@/components/uiMode/UiModeProvider";
+import UiModePicker from "@/components/uiMode/UiModePicker";
+
 const geistSans = Geist({
   variable: "--font-geist-sans",
   subsets: ["latin"],
@@ -44,27 +47,33 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
-        <header className="border-b">
-          <div className="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
-            <Link href="/rods" className="font-semibold">
-              FGS
-            </Link>
+        <UiModeProvider>
+          <header className="border-b">
+            <div className="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
+              <Link href="/rods" className="font-semibold">
+                FGS
+              </Link>
 
-            <nav className="flex flex-wrap items-center gap-2">
-              {NAV.map((n) => (
-                <Link
-                  key={n.href}
-                  href={n.href}
-                  className="px-3 py-1.5 rounded border text-sm hover:bg-gray-50"
-                >
-                  {n.label}
-                </Link>
-              ))}
-            </nav>
-          </div>
-        </header>
+              <div className="flex items-center gap-3 flex-wrap justify-end">
+                <nav className="flex flex-wrap items-center gap-2">
+                  {NAV.map((n) => (
+                    <Link
+                      key={n.href}
+                      href={n.href}
+                      className="px-3 py-1.5 rounded border text-sm hover:bg-gray-50"
+                    >
+                      {n.label}
+                    </Link>
+                  ))}
+                </nav>
 
-        {children}
+                <UiModePicker />
+              </div>
+            </div>
+          </header>
+
+          {children}
+        </UiModeProvider>
       </body>
     </html>
   );

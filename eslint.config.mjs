@@ -8,6 +8,9 @@ export default defineConfig([
 
   // Override default ignores of eslint-config-next + add our repo ignores
   globalIgnores([
+    // Safety: ignore any accidental in-tree backups
+    "**/*.bak.*",
+
     ".next/**",
     "out/**",
     "build/**",
