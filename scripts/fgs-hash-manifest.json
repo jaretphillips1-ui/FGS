@@ -24,7 +24,7 @@
     },
     {
       "path": "scripts\\fgs-truth.ps1",
-      "sha256": "A94718C53CE5FB88BC4F16FD78DA76334F2FCDC14C711F4AA0A8AEF6F866F63B"
+      "sha256": "E2ED88EEA38C134EB6590702B0E5F76A9679B0876D2C1DA4E00A40E23E3D2192"
     },
     {
       "path": "scripts\\fgs-verify-mirror.ps1",
