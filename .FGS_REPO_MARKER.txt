@@ -1,0 +1,3 @@
+FGS_REPO_MARKER
+Created=2026-02-12 20:11:39
+Purpose=Repo identity sentinel for FGS runners
