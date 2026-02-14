@@ -8,7 +8,9 @@
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
-    "verify": "git status && npm run build"
+    "verify": "git status && npm run build",
+    "clean:next": "pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/fgs-clean-next.ps1",
+    "build:clean": "npm run clean:next && next build"
   },
   "dependencies": {
     "@supabase/auth-helpers-nextjs": "^0.15.0",
