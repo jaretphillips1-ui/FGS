@@ -1,0 +1,78 @@
+:root {
+  /* Layout + radius */
+  --radius-sm: 8px;
+  --radius-md: 10px;
+  --radius-lg: 12px;
+
+  /* ShadCN/Tailwind-compatible radius token */
+  --radius: var(--radius-md);
+
+  /* Core theme (FGS source-of-truth) */
+  --background: #ffffff;
+  --foreground: #171717;
+
+  /* Surfaces (FGS) */
+  --card: var(--background);
+  --card-foreground: var(--foreground);
+  --popover: var(--background);
+  --popover-foreground: var(--foreground);
+
+  /* Brand / emphasis */
+  --primary: var(--foreground);
+  --primary-foreground: #fafafa;
+
+  /* Subtle surfaces */
+  --secondary: rgba(0, 0, 0, 0.04);
+  --secondary-foreground: var(--foreground);
+
+  --muted: rgba(0, 0, 0, 0.06);
+  --muted-foreground: rgba(0, 0, 0, 0.55);
+
+  --accent: rgba(0, 0, 0, 0.06);
+  --accent-foreground: var(--foreground);
+
+  /* Status */
+  --destructive: #e40014;
+  --destructive-foreground: #fafafa;
+
+  /* Lines + focus */
+  --border: rgba(0, 0, 0, 0.10);
+  --input: rgba(0, 0, 0, 0.10);
+  --ring: rgba(0, 0, 0, 0.35);
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+
+    --card: var(--background);
+    --card-foreground: var(--foreground);
+    --popover: var(--background);
+    --popover-foreground: var(--foreground);
+
+    --primary: var(--foreground);
+    --primary-foreground: #171717;
+
+    --secondary: rgba(255, 255, 255, 0.08);
+    --secondary-foreground: var(--foreground);
+
+    --muted: rgba(255, 255, 255, 0.08);
+    --muted-foreground: rgba(255, 255, 255, 0.65);
+
+    --accent: rgba(255, 255, 255, 0.10);
+    --accent-foreground: var(--foreground);
+
+    --destructive: #82181a;
+    --destructive-foreground: #fafafa;
+
+    --border: rgba(255, 255, 255, 0.16);
+    --input: rgba(255, 255, 255, 0.16);
+    --ring: rgba(255, 255, 255, 0.30);
+
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35);
+  }
+}
