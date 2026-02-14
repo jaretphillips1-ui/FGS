@@ -19,5 +19,8 @@ export default defineConfig([
     // FGS: ignore our patch/backup folders so lint output stays clean
     ".patch_backups/**",
     "scripts/_bak/**",
+
+    // JP ENGINE parity: also ignore EFSP-style patch backups if they ever appear here
+    "scripts/_PATCH_BACKUPS/**",
   ]),
 ]);

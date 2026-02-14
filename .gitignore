@@ -87,7 +87,9 @@ scripts/*.bak*
 
 .patch_backups/
 
+# JP ENGINE parity: ignore EFSP-style patch backups if they ever appear here
+scripts/_PATCH_BACKUPS/
+
 
 # JP ENGINE: scratch drop zone
 _DROP/
-
