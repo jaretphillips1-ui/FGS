@@ -3,6 +3,7 @@
 # FGS Backup (no-drift): works when executed as a script OR pasted
 # POLICY: Only OneDrive Desktop mirror is allowed. Never write to local Desktop\FGS.
 # POLICY: OneDrive Desktop\FGS mirror allowed files: FGS_LATEST.zip + FGS_MASTER_CHECKPOINT.txt ONLY.
+# POLICY: LAST_RUN / TURNOVER status notes must NEVER be placed in the mirror folder.
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
@@ -61,7 +62,7 @@ if ([string]::IsNullOrWhiteSpace($oneDriveRoot)) {
 $desktopOneDriveRoot = Join-Path $oneDriveRoot "Desktop"
 $desktopOneDriveFGS  = Join-Path $desktopOneDriveRoot "FGS"
 
-# Drift archive root (for any unexpected Desktop mirror content)
+# Drift archive root (for any unexpected Desktop mirror content OR status notes)
 $archiveRoot = Join-Path $oneDriveRoot "AI_Workspace\_SAVES\FGS\DESKTOP_ARCHIVE"
 
 $masterNotePath = Join-Path $saves "FGS_MASTER_CHECKPOINT.txt"
@@ -109,7 +110,8 @@ $null = New-FGSBackupMarker -Kind MIRROR
 # ============================
 # MIRROR (NO LOCAL DESKTOP\FGS)
 # - Mirror ZIP + MASTER CHECKPOINT into OneDrive\Desktop\FGS only
-# - Sweep offenders off Desktop roots into OneDrive\Desktop\FGS
+# - Sweep ZIP/CHECKPOINT offenders off Desktop ROOTS into OneDrive\Desktop\FGS
+# - Archive LAST_RUN / TURNOVER notes to DESKTOP_ARCHIVE (NEVER into mirror)
 # - Hard-prune mirror folder so it contains ONLY the allowed set
 # - If local Desktop\FGS exists, archive+remove it
 # ============================
@@ -151,32 +153,60 @@ try {
   Write-Host "✅ Desktop mirrored (OneDrive folder-only):" -ForegroundColor Green
   Write-Host ("  {0}" -f $desktopOneDriveFGS)
 
-  # Sweep any legacy offenders off Desktop roots (local + OneDrive desktop root) into OneDrive\Desktop\FGS
-  function Sweep-Offenders([Parameter(Mandatory)][string]$Root, [Parameter(Mandatory)][string]$Name) {
+  function Ensure-Dir([Parameter(Mandatory)][string]$Path) {
+    New-Item -ItemType Directory -Force -Path $Path | Out-Null
+  }
+
+  # Sweep ZIP/CHECKPOINT offenders off Desktop roots into OneDrive\Desktop\FGS
+  function Sweep-ZipCheckpointOffenders([Parameter(Mandatory)][string]$Root, [Parameter(Mandatory)][string]$Name) {
     if (-not (Test-Path -LiteralPath $Root)) { return }
 
     [array]$off = @(
       Get-ChildItem -LiteralPath $Root -File -Filter "FGS_LATEST*.zip" -ErrorAction SilentlyContinue
       Get-ChildItem -LiteralPath $Root -File -Filter "FGS_*CHECKPOINT*.txt" -ErrorAction SilentlyContinue
-      Get-ChildItem -LiteralPath $Root -File -Filter "FGS_LAST_RUN*.txt" -ErrorAction SilentlyContinue
-      Get-ChildItem -LiteralPath $Root -File -Filter "FGS_TURNOVER_*.txt" -ErrorAction SilentlyContinue
     ) | Where-Object { $_ }
 
     if (@($off).Count -gt 0) {
       foreach ($f in $off) {
         Move-Item -Force -LiteralPath $f.FullName -Destination (Join-Path $desktopOneDriveFGS $f.Name)
       }
-      Write-Host ("🧹 Swept {0} offender(s) off {1} Desktop ROOT -> OneDrive\Desktop\FGS" -f @($off).Count, $Name) -ForegroundColor Yellow
+      Write-Host ("🧹 Swept {0} ZIP/CHECKPOINT offender(s) off {1} Desktop ROOT -> OneDrive\Desktop\FGS" -f @($off).Count, $Name) -ForegroundColor Yellow
     }
   }
 
-  Sweep-Offenders -Root $desktopLocalRoot    -Name "local"
-  Sweep-Offenders -Root $desktopOneDriveRoot -Name "od"
+  # Archive LAST_RUN / TURNOVER notes off Desktop roots (NEVER into mirror)
+  function Archive-StatusNotes([Parameter(Mandatory)][string]$Root, [Parameter(Mandatory)][string]$Name) {
+    if (-not (Test-Path -LiteralPath $Root)) { return }
+
+    [array]$notes = @(
+      Get-ChildItem -LiteralPath $Root -File -Filter "FGS_LAST_RUN*.txt" -ErrorAction SilentlyContinue
+      Get-ChildItem -LiteralPath $Root -File -Filter "FGS_TURNOVER_*.txt" -ErrorAction SilentlyContinue
+    ) | Where-Object { $_ }
+
+    if (@($notes).Count -gt 0) {
+      $stampN = Get-Date -Format "yyyyMMdd_HHmmss"
+      $dest = Join-Path $archiveRoot ("DesktopRoot_StatusNotes_{0}_{1}" -f $Name, $stampN)
+      Ensure-Dir $dest
+
+      foreach ($n in $notes) {
+        Copy-Item -Force -LiteralPath $n.FullName -Destination (Join-Path $dest $n.Name)
+        Remove-Item -Force -LiteralPath $n.FullName
+      }
+
+      Write-Host ("🧹 Archived {0} status note(s) off {1} Desktop ROOT -> {2}" -f @($notes).Count, $Name, $dest) -ForegroundColor Yellow
+    }
+  }
+
+  Sweep-ZipCheckpointOffenders -Root $desktopLocalRoot    -Name "local"
+  Sweep-ZipCheckpointOffenders -Root $desktopOneDriveRoot -Name "od"
+
+  Archive-StatusNotes -Root $desktopLocalRoot    -Name "local"
+  Archive-StatusNotes -Root $desktopOneDriveRoot -Name "od"
 
   # HARD PRUNE: mirror folder must contain ONLY the allowed set
   $allowed = @("FGS_LATEST.zip","FGS_MASTER_CHECKPOINT.txt")
   $extras = @(
-    Get-ChildItem -LiteralPath $desktopOneDriveFGS -Force -ErrorAction SilentlyContinue |
+    Get-ChildItem -LiteralPath $desktopOneDriveFGS -Force -File -ErrorAction SilentlyContinue |
       Where-Object { $_.Name -notin $allowed }
   )
 
