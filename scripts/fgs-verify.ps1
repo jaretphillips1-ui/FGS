@@ -96,6 +96,31 @@ try {
     Write-Ok "No local Desktop mirror folder (good)."
   }
 
+  # 0.5) HARD POLICY: OneDrive Desktop\FGS mirror must contain ONLY allowed set
+  $oneDriveRoot = $env:OneDrive
+  if ([string]::IsNullOrWhiteSpace($oneDriveRoot)) {
+    $oneDriveRoot = Join-Path $env:USERPROFILE "OneDrive"
+  }
+  $mirror = Join-Path $oneDriveRoot "Desktop\FGS"
+  $allowed = @("FGS_LATEST.zip","FGS_MASTER_CHECKPOINT.txt")
+
+  if (-not (Test-Path -LiteralPath $mirror)) {
+    throw "Missing OneDrive desktop mirror folder: $mirror"
+  }
+
+  $mirrorFiles = @(
+    Get-ChildItem -LiteralPath $mirror -Force -File -ErrorAction SilentlyContinue
+  )
+
+  $extras = @($mirrorFiles | Where-Object { $_.Name -notin $allowed })
+  if (@($extras).Count -gt 0) {
+    Write-Bad "DRIFT: OneDrive Desktop\FGS mirror contains extra file(s) (not allowed)."
+    $extras | ForEach-Object { Write-Host ("  EXTRA: " + $_.FullName) }
+    throw "DRIFT: OneDrive Desktop\FGS mirror must contain ONLY: $($allowed -join ', ')"
+  } else {
+    Write-Ok "OneDrive Desktop mirror allowed-set: OK (only 2 files)."
+  }
+
   # 1) Repo cleanliness
   $gs = (git status --porcelain)
   if ($gs) {
@@ -131,12 +156,16 @@ try {
   if ($node) { Write-Warn "node process(es) running. (May be unrelated, but worth noting.)" }
   else { Write-Ok "No node processes running." }
 
-  # 4) ZIP integrity: canonical == OneDrive Desktop mirror
+  # 4) ZIP integrity: canonical == OneDrive Desktop mirror + master checkpoint exists in both places
   $zipCanonical = "C:\Users\lsphi\OneDrive\AI_Workspace\_SAVES\FGS\LATEST\FGS_LATEST.zip"
-  $zipDesktop   = "C:\Users\lsphi\OneDrive\Desktop\FGS\FGS_LATEST.zip"
+  $zipDesktop   = Join-Path $mirror "FGS_LATEST.zip"
+  $ckCanonical  = "C:\Users\lsphi\OneDrive\AI_Workspace\_SAVES\FGS\LATEST\FGS_MASTER_CHECKPOINT.txt"
+  $ckDesktop    = Join-Path $mirror "FGS_MASTER_CHECKPOINT.txt"
 
   if (-not (Test-Path -LiteralPath $zipCanonical)) { throw "Missing canonical ZIP: $zipCanonical" }
   if (-not (Test-Path -LiteralPath $zipDesktop))   { throw "Missing desktop ZIP:   $zipDesktop" }
+  if (-not (Test-Path -LiteralPath $ckCanonical))  { throw "Missing canonical master checkpoint: $ckCanonical" }
+  if (-not (Test-Path -LiteralPath $ckDesktop))    { throw "Missing desktop master checkpoint:   $ckDesktop" }
 
   $h1 = (Get-FileHash -LiteralPath $zipCanonical -Algorithm SHA256).Hash
   $h2 = (Get-FileHash -LiteralPath $zipDesktop   -Algorithm SHA256).Hash

@@ -2,6 +2,7 @@
 #@FGS_BACKUP_HEADER
 # FGS Backup (no-drift): works when executed as a script OR pasted
 # POLICY: Only OneDrive Desktop mirror is allowed. Never write to local Desktop\FGS.
+# POLICY: OneDrive Desktop\FGS mirror allowed files: FGS_LATEST.zip + FGS_MASTER_CHECKPOINT.txt ONLY.
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
@@ -60,15 +61,15 @@ if ([string]::IsNullOrWhiteSpace($oneDriveRoot)) {
 $desktopOneDriveRoot = Join-Path $oneDriveRoot "Desktop"
 $desktopOneDriveFGS  = Join-Path $desktopOneDriveRoot "FGS"
 
-# Drift archive root (for any unexpected local Desktop\FGS folder)
+# Drift archive root (for any unexpected Desktop mirror content)
 $archiveRoot = Join-Path $oneDriveRoot "AI_Workspace\_SAVES\FGS\DESKTOP_ARCHIVE"
 
-$notePath   = Join-Path $saves "FGS_LATEST_CHECKPOINT.txt"
-$latestZip  = Join-Path $saves "FGS_LATEST.zip"
-$stampedZip = Join-Path $saves ("FGS_LATEST_{0}.zip" -f $stamp)
+$masterNotePath = Join-Path $saves "FGS_MASTER_CHECKPOINT.txt"
+$latestZip      = Join-Path $saves "FGS_LATEST.zip"
+$stampedZip     = Join-Path $saves ("FGS_LATEST_{0}.zip" -f $stamp)
 
 $note = @"
-FGS CHECKPOINT
+FGS MASTER CHECKPOINT
 Date: $(Get-Date -Format "yyyy-MM-dd HH:mm:ss")
 Repo: $repo
 Branch: $(git branch --show-current)
@@ -79,7 +80,7 @@ Stamped ZIP: $stampedZip
 Desktop ZIP (OneDrive folder): $desktopOneDriveFGS\FGS_LATEST.zip
 "@
 
-$note | Set-Content -Path $notePath -Encoding UTF8
+$note | Set-Content -LiteralPath $masterNotePath -Encoding UTF8
 
 # Stage repo (exclude bulky folders), then zip
 $tmp = Join-Path $env:TEMP ("FGS_STAGE_{0}" -f $stamp)
@@ -100,23 +101,24 @@ Remove-Item $tmp -Recurse -Force
 Write-Host "`n✅ Backup complete:"
 Write-Host "  $latestZip"
 Write-Host "  $stampedZip"
-Write-Host "  $notePath"
+Write-Host "  $masterNotePath"
 
 # FGS_BACKUP_MIRROR
 $null = New-FGSBackupMarker -Kind MIRROR
 
 # ============================
 # MIRROR (NO LOCAL DESKTOP\FGS)
-# - Mirror ZIP + CHECKPOINT into OneDrive\Desktop\FGS only
+# - Mirror ZIP + MASTER CHECKPOINT into OneDrive\Desktop\FGS only
 # - Sweep offenders off Desktop roots into OneDrive\Desktop\FGS
+# - Hard-prune mirror folder so it contains ONLY the allowed set
 # - If local Desktop\FGS exists, archive+remove it
 # ============================
 try {
   if (-not (Test-Path -LiteralPath $latestZip)) {
     throw "Canonical zip missing for mirror: $latestZip"
   }
-  if (-not (Test-Path -LiteralPath $notePath)) {
-    throw "Checkpoint note missing for mirror: $notePath"
+  if (-not (Test-Path -LiteralPath $masterNotePath)) {
+    throw "Master checkpoint note missing for mirror: $masterNotePath"
   }
 
   if (-not (Test-Path -LiteralPath $desktopOneDriveRoot)) {
@@ -142,8 +144,9 @@ try {
   # OneDrive Desktop\FGS (ONLY)
   New-Item -ItemType Directory -Force -Path $desktopOneDriveFGS | Out-Null
 
-  Copy-Item -LiteralPath $latestZip -Destination (Join-Path $desktopOneDriveFGS "FGS_LATEST.zip") -Force
-  Copy-Item -LiteralPath $notePath  -Destination (Join-Path $desktopOneDriveFGS "FGS_LATEST_CHECKPOINT.txt") -Force
+  # Mirror the two allowed files
+  Copy-Item -LiteralPath $latestZip      -Destination (Join-Path $desktopOneDriveFGS "FGS_LATEST.zip") -Force
+  Copy-Item -LiteralPath $masterNotePath -Destination (Join-Path $desktopOneDriveFGS "FGS_MASTER_CHECKPOINT.txt") -Force
 
   Write-Host "✅ Desktop mirrored (OneDrive folder-only):" -ForegroundColor Green
   Write-Host ("  {0}" -f $desktopOneDriveFGS)
@@ -154,7 +157,9 @@ try {
 
     [array]$off = @(
       Get-ChildItem -LiteralPath $Root -File -Filter "FGS_LATEST*.zip" -ErrorAction SilentlyContinue
-      Get-ChildItem -LiteralPath $Root -File -Filter "FGS_LATEST*CHECKPOINT*.txt" -ErrorAction SilentlyContinue
+      Get-ChildItem -LiteralPath $Root -File -Filter "FGS_*CHECKPOINT*.txt" -ErrorAction SilentlyContinue
+      Get-ChildItem -LiteralPath $Root -File -Filter "FGS_LAST_RUN*.txt" -ErrorAction SilentlyContinue
+      Get-ChildItem -LiteralPath $Root -File -Filter "FGS_TURNOVER_*.txt" -ErrorAction SilentlyContinue
     ) | Where-Object { $_ }
 
     if (@($off).Count -gt 0) {
@@ -168,13 +173,33 @@ try {
   Sweep-Offenders -Root $desktopLocalRoot    -Name "local"
   Sweep-Offenders -Root $desktopOneDriveRoot -Name "od"
 
+  # HARD PRUNE: mirror folder must contain ONLY the allowed set
+  $allowed = @("FGS_LATEST.zip","FGS_MASTER_CHECKPOINT.txt")
+  $extras = @(
+    Get-ChildItem -LiteralPath $desktopOneDriveFGS -Force -ErrorAction SilentlyContinue |
+      Where-Object { $_.Name -notin $allowed }
+  )
+
+  if (@($extras).Count -gt 0) {
+    $stamp3 = Get-Date -Format "yyyyMMdd_HHmmss"
+    $archive = Join-Path $archiveRoot "OneDriveDesktop_FGS_EXTRAS_$stamp3"
+    New-Item -ItemType Directory -Force -Path $archive | Out-Null
+
+    foreach ($x in $extras) {
+      Copy-Item -Force -LiteralPath $x.FullName -Destination (Join-Path $archive $x.Name)
+      Remove-Item -Force -LiteralPath $x.FullName
+    }
+
+    Write-Host ("🧹 Pruned {0} extra file(s) from OneDrive\Desktop\FGS (archived to): {1}" -f @($extras).Count, $archive) -ForegroundColor Yellow
+  }
+
 } catch {
   Write-Warning ("Desktop mirror (OneDrive folder-only) failed: " + $_.Exception.Message)
 }
 
 # ============================
 # FGS RETENTION POLICY
-# - Keep FGS_LATEST.zip + CHECKPOINT.txt always
+# - Keep FGS_LATEST.zip + FGS_MASTER_CHECKPOINT.txt always
 # - Keep only the newest 20 timestamped zips (FGS_LATEST_*.zip)
 # ============================
 try {

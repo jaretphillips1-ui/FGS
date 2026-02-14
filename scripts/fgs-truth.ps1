@@ -56,7 +56,7 @@ function Get-FgsFooterText {
   $mirrorReq = 0
   if (Test-Path $deskFGS_OD) {
     if (Test-Path (Join-Path $deskFGS_OD "FGS_LATEST.zip"))            { $mirrorReq++ }
-    if (Test-Path (Join-Path $deskFGS_OD "FGS_LATEST_CHECKPOINT.txt")) { $mirrorReq++ }
+    if (Test-Path (Join-Path $deskFGS_OD "FGS_MASTER_CHECKPOINT.txt")) { $mirrorReq++ }
   }
 
   # Local Desktop\FGS should not exist; flag if it does
@@ -115,3 +115,4 @@ function Get-FgsFooterText {
 }
 
 Write-Host (Get-FgsFooterText -CacheSeconds $CacheSeconds)
+

@@ -30,14 +30,16 @@ $desktopLocalRoot = Join-Path $env:USERPROFILE "Desktop"
 $desktopODRoot    = Join-Path $oneDriveRoot "Desktop"
 
 # POLICY:
-# - Local Desktop\FGS mirror folder is NOT ALLOWED (expected 0 files)
-# - OneDrive Desktop\FGS mirror folder IS REQUIRED (expected 2 files)
+# - Local Desktop\FGS mirror folder is NOT ALLOWED
+# - OneDrive Desktop\FGS mirror folder IS REQUIRED and must contain EXACTLY:
+#   - FGS_LATEST.zip
+#   - FGS_MASTER_CHECKPOINT.txt
 $deskLocalFGS = Join-Path $desktopLocalRoot "FGS"
 $deskODFGS    = Join-Path $desktopODRoot    "FGS"
 
 $savesRoot = Join-Path $oneDriveRoot "AI_Workspace\_SAVES\FGS\LATEST"
 $canonZip  = Join-Path $savesRoot "FGS_LATEST.zip"
-$canonNote = Join-Path $savesRoot "FGS_LATEST_CHECKPOINT.txt"
+$canonNote = Join-Path $savesRoot "FGS_MASTER_CHECKPOINT.txt"
 
 function Get-GitClean {
   try {
@@ -57,7 +59,9 @@ function Get-RootOffenders {
 
   @(
     Get-ChildItem -LiteralPath $Root -File -Filter "FGS_LATEST*.zip" -ErrorAction SilentlyContinue
-    Get-ChildItem -LiteralPath $Root -File -Filter "FGS_LATEST*CHECKPOINT*.txt" -ErrorAction SilentlyContinue
+    Get-ChildItem -LiteralPath $Root -File -Filter "FGS_*CHECKPOINT*.txt" -ErrorAction SilentlyContinue
+    Get-ChildItem -LiteralPath $Root -File -Filter "FGS_LAST_RUN*.txt" -ErrorAction SilentlyContinue
+    Get-ChildItem -LiteralPath $Root -File -Filter "FGS_TURNOVER_*.txt" -ErrorAction SilentlyContinue
   ) | Where-Object { $_ }
 }
 
@@ -71,7 +75,7 @@ function Get-MirrorCount {
   param([Parameter(Mandatory)][string]$Folder)
 
   $zip  = Join-Path $Folder "FGS_LATEST.zip"
-  $note = Join-Path $Folder "FGS_LATEST_CHECKPOINT.txt"
+  $note = Join-Path $Folder "FGS_MASTER_CHECKPOINT.txt"
   $n = 0
   if (Test-Path -LiteralPath $zip)  { $n++ }
   if (Test-Path -LiteralPath $note) { $n++ }

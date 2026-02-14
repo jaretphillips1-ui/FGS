@@ -212,7 +212,7 @@ try {
   # Canonical save root (ONE TRUE SAVE)
   $savesRoot = Join-Path $oneDriveRoot "AI_Workspace\_SAVES\FGS\LATEST"
   $canonZip  = Join-Path $savesRoot "FGS_LATEST.zip"
-  $canonNote = Join-Path $savesRoot "FGS_LATEST_CHECKPOINT.txt"
+  $canonNote = Join-Path $savesRoot "FGS_MASTER_CHECKPOINT.txt"
 
   # Drift archive root
   $archiveRoot = Join-Path $oneDriveRoot "AI_Workspace\_SAVES\FGS\DESKTOP_ARCHIVE"
@@ -303,7 +303,7 @@ try {
 
     Ensure-Dir $deskODFGS
     Copy-Item -Force -LiteralPath $canonZip  -Destination (Join-Path $deskODFGS "FGS_LATEST.zip")
-    Copy-Item -Force -LiteralPath $canonNote -Destination (Join-Path $deskODFGS "FGS_LATEST_CHECKPOINT.txt")
+    Copy-Item -Force -LiteralPath $canonNote -Destination (Join-Path $deskODFGS "FGS_MASTER_CHECKPOINT.txt")
     Write-Ok "Re-mirrored OneDrive Desktop\FGS from canonical _SAVES"
   }
 
@@ -328,7 +328,7 @@ try {
 
   Invoke-Step -Name "Verify mirrored ZIP + NOTE hash match" -Action {
     Verify-FileMatch -Canon $canonZip  -Mirror (Join-Path $deskODFGS "FGS_LATEST.zip")            -Name "ZIP"  | Out-Host
-    Verify-FileMatch -Canon $canonNote -Mirror (Join-Path $deskODFGS "FGS_LATEST_CHECKPOINT.txt") -Name "NOTE" | Out-Host
+    Verify-FileMatch -Canon $canonNote -Mirror (Join-Path $deskODFGS "FGS_MASTER_CHECKPOINT.txt") -Name "NOTE" | Out-Host
   }
 
   Invoke-Step -Name "Run fgs-verify.ps1" -Action {
@@ -396,3 +396,4 @@ catch {
 finally {
   try { Stop-Transcript | Out-Null } catch {}
 }
+
