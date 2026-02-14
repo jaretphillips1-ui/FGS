@@ -38,8 +38,5 @@ jobs:
       - name: Lint
         run: npm run lint
 
-      - name: Clean .next (optional safety)
-        run: npm run build:clean
-
       - name: Build
         run: npm run build
