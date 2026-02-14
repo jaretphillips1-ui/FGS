@@ -87,3 +87,7 @@ scripts/*.bak*
 
 .patch_backups/
 
+
+# JP ENGINE: scratch drop zone
+_DROP/
+
